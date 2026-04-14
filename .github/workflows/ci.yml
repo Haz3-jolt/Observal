@@ -1,22 +1,15 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Observal CI — runs on every PR targeting main and on pushes to main.
 #
-# Soft-launch mode:
-#   The `lint` and `web-lint` jobs use `continue-on-error: true` so pre-existing
-#   violations in the current codebase don't block merges. They still run and
-#   surface warnings in the PR checks UI — use those reports to burn down the
-#   backlog in follow-up PRs. Once the repo is clean, remove `continue-on-error`
-#   and add those jobs to the required status checks list below.
-#
 # Recommended branch-protection rules (Settings → Branches → main):
-#   Required status checks (initial soft-launch set):
+#   Required status checks:
+#     • lint
 #     • test (3.11)
 #     • test (3.12)
 #     • test (3.13)
-#     • docker-build
-#   Required status checks (after soft-launch, once lint backlog is clean):
-#     • lint
 #     • web-lint
+#     • docker-build
+#     • security-scan
 #   Require a pull request before merging
 #   Require approvals: 1
 #   Do not allow bypassing the above settings
@@ -39,8 +32,6 @@ jobs:
   lint:
     name: lint
     runs-on: ubuntu-latest
-    # Soft-launch: don't block merges on pre-existing ruff violations.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -64,7 +55,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v4
@@ -92,8 +83,6 @@ jobs:
   web-lint:
     name: web-lint
     runs-on: ubuntu-latest
-    # Soft-launch: don't block merges on pre-existing ESLint errors.
-    continue-on-error: true
     defaults:
       run:
         working-directory: web
@@ -138,3 +127,47 @@ jobs:
 
       - name: Build images
         run: docker compose build
+
+# ── Job 5: Python SAST with bandit ──────────────────────────────────────────
+  security-scan:
+    name: security-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+      - name: Install Python 3.12
+        run: uv python install 3.12
+      - name: Run bandit
+        run: uv run --with bandit bandit -r observal-server/ observal_cli/ -c pyproject.toml -f json -o bandit-report.json || true
+      - name: Check bandit results
+        run: uv run --with bandit bandit -r observal-server/ observal_cli/ -c pyproject.toml -ll
+
+# ── Job 6: Dependency audit ─────────────────────────────────────────────────
+  dependency-audit:
+    name: dependency-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python dependency audit
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+      - name: Run pip-audit
+        # TODO: burn down pre-existing advisories then remove || true
+        run: |
+          uv python install 3.12
+          cd observal-server
+          uv run --with pip-audit pip-audit --strict --desc || true
+
+      - name: JS dependency audit
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Run pnpm audit
+        run: |
+          cd web
+          pnpm install --frozen-lockfile
+          pnpm audit --prod || true
