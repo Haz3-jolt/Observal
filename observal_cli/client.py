@@ -1,5 +1,6 @@
 import logging
 import time
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 import typer
@@ -99,7 +100,8 @@ def _request_with_retry(
         # Honor Retry-After header if present
         retry_after = r.headers.get("Retry-After")
         delay = float(retry_after) if retry_after else 0.5 * (2**attempt)
-        logger.debug(f"Retrying {method.upper()} {url} (attempt {attempt + 1}, delay {delay:.1f}s)")
+        safe_url = urlunparse(urlparse(url)._replace(netloc=urlparse(url).hostname or ""))
+        logger.debug(f"Retrying {method.upper()} {safe_url} (attempt {attempt + 1}, delay {delay:.1f}s)")
         time.sleep(delay)
     return r  # unreachable but satisfies type checker
 
