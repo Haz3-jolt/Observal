@@ -41,8 +41,14 @@ class ReconcilePayload(BaseModel):
 
 
 async def _session_has_data(session_id: str) -> bool:
-    """Return True if session_events contains at least one row for this session."""
-    sql = "SELECT count() AS cnt FROM session_events FINAL WHERE session_id = {sid:String} FORMAT JSON"
+    """Return True if session_events contains at least one row for this session.
+
+    Intentionally omits FINAL: an existence check does not need full deduplication
+    and FINAL on ReplacingMergeTree forces an expensive cross-part merge just to
+    count rows.  An approximate count (potentially including not-yet-merged dupes)
+    is correct for the reconcile gate — we only need to know the session exists.
+    """
+    sql = "SELECT count() AS cnt FROM session_events WHERE session_id = {sid:String} FORMAT JSON"
     try:
         r = await _query(sql, {"param_sid": session_id})
         r.raise_for_status()
