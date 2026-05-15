@@ -139,6 +139,9 @@ class Settings(BaseSettings):
     ENABLE_OPENAPI: bool = False  # expose /docs, /redoc, /openapi.json
     ENABLE_METRICS: bool = False  # expose Prometheus /metrics endpoint
 
+    # Enable the Insights feature. Set INSIGHTS_AVAILABLE=true in .env to enable.
+    INSIGHTS_AVAILABLE: bool = False
+
     # Deployment mode
     DEPLOYMENT_MODE: Literal["local", "enterprise"] = "local"
 
