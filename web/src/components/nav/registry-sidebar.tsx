@@ -10,7 +10,6 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import {
   Sidebar,
   SidebarContent,
@@ -143,9 +142,9 @@ export function RegistrySidebar() {
               <Link href="/">
                 <div className="flex size-8 shrink-0 items-center justify-center">
                   {brandingLogo ? (
-                    <img src={brandingLogo} alt="" width={20} height={20} className="object-contain" />
+                    <img src={brandingLogo} alt="" width={26} height={26} className="object-contain" />
                   ) : (
-                    <Image src="/favicon.ico" alt="" width={20} height={20} />
+                    <img src="/observal-logo.svg" alt="" width={26} height={26} className="object-contain" />
                   )}
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">

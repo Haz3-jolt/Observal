@@ -525,7 +525,7 @@ export default function SettingsPage() {
                   {logoPreview ? (
                     <img src={logoPreview} alt="" className="w-5 h-5 object-contain" />
                   ) : (
-                    <img src="/favicon.ico" alt="" className="w-5 h-5" />
+                    <img src="/observal-logo.svg" alt="" className="w-5 h-5 object-contain" />
                   )}
                 </div>
                 {wordmarkPreview ? (

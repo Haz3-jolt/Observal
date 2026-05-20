@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label";
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { ssoEnabled, ssoOnly, samlEnabled } = useDeploymentConfig();
+  const { ssoEnabled, ssoOnly, samlEnabled, brandingAppName, brandingLogo, brandingWordmark } = useDeploymentConfig();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -167,9 +167,18 @@ function LoginContent() {
         <div className="w-full max-w-md">
           <div className="rounded-lg border bg-card shadow-sm">
             <div className="flex flex-col items-center gap-2 border-b px-8 pb-6 pt-8 animate-in">
-              <h1 className="text-2xl font-semibold tracking-tight font-[family-name:var(--font-display)]">
-                Observal
-              </h1>
+              {brandingLogo ? (
+                <img src={brandingLogo} alt="" className="h-8 w-8 object-contain" />
+              ) : (
+                <img src="/observal-logo.svg" alt="" className="h-8 w-8 object-contain" />
+              )}
+              {brandingWordmark ? (
+                <img src={brandingWordmark} alt={brandingAppName || "Observal"} className="h-6 max-w-48 object-contain" />
+              ) : (
+                <h1 className="text-2xl font-semibold tracking-tight font-[family-name:var(--font-display)]">
+                  {brandingAppName || "Observal"}
+                </h1>
+              )}
               <p className="text-sm text-muted-foreground">
                 You must change your password before continuing
               </p>
@@ -247,9 +256,18 @@ function LoginContent() {
       <div className="w-full max-w-md">
         <div className="rounded-lg border bg-card shadow-sm">
           <div className="flex flex-col items-center gap-2 border-b px-8 pb-6 pt-8 animate-in">
-            <h1 className="text-2xl font-semibold tracking-tight font-[family-name:var(--font-display)]">
-              Observal
-            </h1>
+            {brandingLogo ? (
+              <img src={brandingLogo} alt="" className="h-8 w-8 object-contain" />
+            ) : (
+              <img src="/observal-logo.svg" alt="" className="h-8 w-8 object-contain" />
+            )}
+            {brandingWordmark ? (
+              <img src={brandingWordmark} alt={brandingAppName || "Observal"} className="h-6 max-w-48 object-contain" />
+            ) : (
+              <h1 className="text-2xl font-semibold tracking-tight font-[family-name:var(--font-display)]">
+                {brandingAppName || "Observal"}
+              </h1>
+            )}
             <p className="text-sm text-muted-foreground">
               Sign in to your account
             </p>
