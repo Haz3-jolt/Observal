@@ -30,21 +30,10 @@
   <a href="https://pypi.org/project/observal-cli/"><img src="https://img.shields.io/pypi/v/observal-cli?style=flat-square&logo=pypi&logoColor=white&label=pypi" alt="PyPI version"></a>
   <a href="https://github.com/BlazeUp-AI/Observal/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/BlazeUp-AI/Observal/ci.yml?branch=main&style=flat-square&logo=github-actions&logoColor=white&label=CI" alt="CI"></a>
   <a href="https://codecov.io/gh/BlazeUp-AI/Observal"><img src="https://img.shields.io/codecov/c/github/BlazeUp-AI/Observal?style=flat-square&logo=codecov" alt="Coverage"></a>
-</p>
-
-<p>
-  <a href="https://pypi.org/project/observal-cli/"><img src="https://img.shields.io/pypi/dm/observal-cli?style=flat-square&logo=pypi&logoColor=white&label=pypi%20downloads%2Fmo" alt="PyPI downloads"></a>
-  <a href="https://github.com/BlazeUp-AI/Observal/releases"><img src="https://img.shields.io/github/downloads/BlazeUp-AI/Observal/total?style=flat-square&logo=github&logoColor=white&label=binary%20downloads" alt="GitHub downloads"></a>
+  <a href="https://github.com/BlazeUp-AI/Observal/stargazers"><img src="https://img.shields.io/github/stars/BlazeUp-AI/Observal?style=flat-square&logo=github" alt="Stars"></a>
+  <a href="https://github.com/BlazeUp-AI/Observal/graphs/contributors"><img src="https://img.shields.io/github/contributors/BlazeUp-AI/Observal?style=flat-square&logo=github" alt="Contributors"></a>
   <a href="https://github.com/BlazeUp-AI/homebrew-observal"><img src="https://img.shields.io/badge/homebrew-observal--cli-f7b73c?style=flat-square&logo=homebrew&logoColor=white" alt="Homebrew"></a>
   <a href="https://github.com/orgs/BlazeUp-AI/packages?repo_name=Observal"><img src="https://img.shields.io/badge/GHCR-ghcr.io%2Fblazeup--ai-0db7ed?style=flat-square&logo=docker&logoColor=white" alt="GHCR"></a>
-</p>
-
-<p>
-  <a href="https://github.com/BlazeUp-AI/Observal/stargazers"><img src="https://img.shields.io/github/stars/BlazeUp-AI/Observal?style=flat-square&logo=github" alt="Stars"></a>
-  <a href="https://github.com/BlazeUp-AI/Observal/forks"><img src="https://img.shields.io/github/forks/BlazeUp-AI/Observal?style=flat-square&logo=github" alt="Forks"></a>
-  <a href="https://github.com/BlazeUp-AI/Observal/graphs/contributors"><img src="https://img.shields.io/github/contributors/BlazeUp-AI/Observal?style=flat-square&logo=github" alt="Contributors"></a>
-  <img src="https://img.shields.io/github/last-commit/BlazeUp-AI/Observal?style=flat-square&logo=git&logoColor=white" alt="Last commit">
-  <a href="https://discord.observal.io"><img src="https://img.shields.io/badge/discord-join-5865f2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
 > If you find Observal useful, please consider giving it a star. It helps others discover the project and keeps development going.
