@@ -8,6 +8,7 @@
 "use client";
 
 import { Suspense, useState, useEffect } from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, ArrowRight, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -168,12 +169,12 @@ function LoginContent() {
           <div className="rounded-lg border bg-card shadow-sm">
             <div className="flex flex-col items-center gap-2 border-b px-8 pb-6 pt-8 animate-in">
               {brandingLogo ? (
-                <img src={brandingLogo} alt="" className="h-8 w-8 object-contain" />
+                <Image src={brandingLogo} alt="" width={32} height={32} className="object-contain" unoptimized />
               ) : (
-                <img src="/observal-logo.svg" alt="" className="h-8 w-8 object-contain" />
+                <Image src="/observal-logo.svg" alt="" width={32} height={32} className="object-contain" />
               )}
               {brandingWordmark ? (
-                <img src={brandingWordmark} alt={brandingAppName || "Observal"} className="h-6 max-w-48 object-contain" />
+                <Image src={brandingWordmark} alt={brandingAppName || "Observal"} width={192} height={24} className="h-6 max-w-48 object-contain" unoptimized />
               ) : (
                 <h1 className="text-2xl font-semibold tracking-tight font-[family-name:var(--font-display)]">
                   {brandingAppName || "Observal"}
@@ -257,12 +258,12 @@ function LoginContent() {
         <div className="rounded-lg border bg-card shadow-sm">
           <div className="flex flex-col items-center gap-2 border-b px-8 pb-6 pt-8 animate-in">
             {brandingLogo ? (
-              <img src={brandingLogo} alt="" className="h-8 w-8 object-contain" />
+              <Image src={brandingLogo} alt="" width={32} height={32} className="object-contain" unoptimized />
             ) : (
-              <img src="/observal-logo.svg" alt="" className="h-8 w-8 object-contain" />
+              <Image src="/observal-logo.svg" alt="" width={32} height={32} className="object-contain" />
             )}
             {brandingWordmark ? (
-              <img src={brandingWordmark} alt={brandingAppName || "Observal"} className="h-6 max-w-48 object-contain" />
+              <Image src={brandingWordmark} alt={brandingAppName || "Observal"} width={192} height={24} className="h-6 max-w-48 object-contain" unoptimized />
             ) : (
               <h1 className="text-2xl font-semibold tracking-tight font-[family-name:var(--font-display)]">
                 {brandingAppName || "Observal"}

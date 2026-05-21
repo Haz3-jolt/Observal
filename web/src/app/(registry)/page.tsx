@@ -5,6 +5,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   Search,
@@ -94,7 +95,7 @@ export default function RegistryHome() {
         <section className="animate-in space-y-6 pt-2">
           <div className="space-y-3 max-w-2xl">
             {brandingWordmark ? (
-              <img src={brandingWordmark} alt={brandingAppName || "Observal"} className="h-8 max-w-56 object-contain object-left" />
+              <Image src={brandingWordmark} alt={brandingAppName || "Observal"} width={224} height={32} className="h-8 max-w-56 object-contain object-left" unoptimized />
             ) : (
               <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight text-foreground">
                 {brandingAppName || "Observal"}
