@@ -427,7 +427,7 @@ class TestMaintainClickhouse:
 
         with (
             patch("services.clickhouse.client._query", side_effect=_parts_query),
-            patch("worker.logger") as mock_logger,
+            patch("jobs.maintenance.logger") as mock_logger,
         ):
             from worker import maintain_clickhouse
 

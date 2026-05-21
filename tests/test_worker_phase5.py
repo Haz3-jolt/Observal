@@ -120,7 +120,7 @@ class TestRunEval:
         with (
             patch("services.eval.eval_service.fetch_traces", new_callable=AsyncMock, return_value=mock_traces),
             patch("services.eval.eval_service.evaluate_trace", new_callable=AsyncMock, return_value=mock_result),
-            patch("worker.publish", new_callable=AsyncMock) as mock_pub,
+            patch("services.redis.publish", new_callable=AsyncMock) as mock_pub,
         ):
             await run_eval({}, "agent-1", "t1")
             mock_pub.assert_called_once()
