@@ -33,7 +33,7 @@
   <a href="https://github.com/BlazeUp-AI/Observal/stargazers"><img src="https://img.shields.io/github/stars/BlazeUp-AI/Observal?style=flat-square&logo=github" alt="Stars"></a>
   <a href="https://github.com/BlazeUp-AI/Observal/graphs/contributors"><img src="https://img.shields.io/github/contributors/BlazeUp-AI/Observal?style=flat-square&logo=github" alt="Contributors"></a>
   <a href="https://github.com/BlazeUp-AI/homebrew-observal"><img src="https://img.shields.io/badge/homebrew-observal--cli-f7b73c?style=flat-square&logo=homebrew&logoColor=white" alt="Homebrew"></a>
-  <a href="https://github.com/orgs/BlazeUp-AI/packages?repo_name=Observal"><img src="https://img.shields.io/badge/GHCR-ghcr.io%2Fblazeup--ai-0db7ed?style=flat-square&logo=docker&logoColor=white" alt="GHCR"></a>
+  <a href="https://github.com/orgs/BlazeUp-AI/packages?repo_name=Observal"><img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/BlazeUp-AI/BADGE_GIST_ID/raw/ghcr-pulls.json&style=flat-square" alt="GHCR pulls"></a>
 </p>
 
 > If you find Observal useful, please consider giving it a star. It helps others discover the project and keeps development going.
