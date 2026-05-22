@@ -130,7 +130,7 @@ class TestDiagnostics:
         app.dependency_overrides[get_db] = _mock_get_db
         app.dependency_overrides[get_current_user] = _mock_admin
         try:
-            with patch("api.routes.admin.settings") as mock_settings:
+            with patch("api.routes.admin.enterprise_settings.settings") as mock_settings:
                 mock_settings.DEPLOYMENT_MODE = "local"
                 mock_settings.JWT_SIGNING_ALGORITHM = "ES256"
                 async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -188,7 +188,7 @@ class TestDiagnostics:
         app.dependency_overrides[get_db] = _mock_get_db
         app.dependency_overrides[get_current_user] = _mock_admin
         try:
-            with patch("api.routes.admin.settings") as mock_settings:
+            with patch("api.routes.admin.enterprise_settings.settings") as mock_settings:
                 mock_settings.DEPLOYMENT_MODE = "enterprise"
                 mock_settings.SECRET_KEY = "change-me-to-a-random-string"
                 mock_settings.OAUTH_CLIENT_ID = None
