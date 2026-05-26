@@ -380,8 +380,6 @@ export interface ReviewItem {
 	required_ide_features?: string[];
 	component_count?: number;
 	components?: { component_type: string; component_id: string }[];
-	visibility?: "public" | "private";
-	team_accesses?: { group_name: string; permission: "view" | "edit" }[];
 }
 
 // ── Scores ──────────────────────────────────────────────────────────

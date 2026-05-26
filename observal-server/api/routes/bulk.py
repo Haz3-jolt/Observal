@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_db, require_role
-from models.agent import Agent, AgentStatus, AgentVersion, AgentVisibility
+from models.agent import Agent, AgentStatus, AgentVersion
 from models.agent_component import AgentComponent
 from models.user import User, UserRole
 from schemas.bulk import BulkAgentItem, BulkAgentRequest, BulkResult, BulkResultItem
@@ -39,7 +39,6 @@ async def _create_single_agent(
         owner=item.owner or user.email,
         created_by=user.id,
         owner_org_id=user.org_id,
-        visibility=AgentVisibility.public,
     )
     db.add(agent)
     await db.flush()

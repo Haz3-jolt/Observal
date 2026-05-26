@@ -67,7 +67,6 @@ def _agent_mock(status=AgentStatus.pending, created_by=None, **extra):
     m.rejection_reason = None
     m.download_count = 0
     m.unique_users = 0
-    m.visibility = "private"
     m.owner_org_id = None
     m.git_url = None
     m.created_by = created_by or uuid.uuid4()
@@ -91,7 +90,6 @@ def _agent_mock(status=AgentStatus.pending, created_by=None, **extra):
         "model_config_json",
         "external_mcps",
         "supported_ides",
-        "visibility",
         "owner_org_id",
         "status",
         "rejection_reason",

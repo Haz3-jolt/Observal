@@ -186,22 +186,11 @@ def require_role(min_role: UserRole):
     return _check
 
 
-def get_user_groups(user: User | None) -> list[str]:
-    """Get user groups extracted from the JWT token during authentication."""
-    if not user:
-        return []
-    return getattr(user, "_groups", [])
-
 
 def get_effective_agent_permission(agent: "Agent", user: User | None) -> str:  # noqa: F821
     """Evaluate effective permission for an agent: 'owner', 'edit', 'view', or 'none'."""
-    # Local import to avoid circular dependency
-    from models.agent import AgentVisibility
-
     if not user:
-        if agent.visibility == AgentVisibility.public:
-            return "view"
-        return "none"
+        return "view"
 
     if agent.created_by == user.id:
         return "owner"
@@ -210,21 +199,7 @@ def get_effective_agent_permission(agent: "Agent", user: User | None) -> str:  #
     if user_role_level <= ROLE_HIERARCHY[UserRole.admin]:
         return "owner"  # admins can edit anything
 
-    if user.org_id is not None and agent.owner_org_id == user.org_id:
-        return "view"
-
-    user_groups = get_user_groups(user)
-    best_perm = "none"
-    perm_levels = {"none": 0, "view": 1, "edit": 2, "owner": 3}
-
-    for access in getattr(agent, "team_accesses", []):
-        if access.group_name in user_groups and perm_levels.get(access.permission, 0) > perm_levels[best_perm]:
-            best_perm = access.permission
-
-    if best_perm == "none" and agent.visibility == AgentVisibility.public:
-        return "view"
-
-    return best_perm
+    return "view"
 
 
 # Convenience shorthand for super_admin-only endpoints

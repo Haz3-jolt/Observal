@@ -38,7 +38,6 @@ async def save_draft(
     agent = Agent(
         name=req.name,
         owner=req.owner or current_user.username or current_user.email,
-        visibility=req.visibility,
         created_by=current_user.id,
         owner_org_id=current_user.org_id,
     )

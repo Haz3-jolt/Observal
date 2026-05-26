@@ -204,7 +204,7 @@ async def fix_agent_org(
 ):
     """Fix agents missing owner_org_id by setting it from the creator's org."""
     optic.debug("org.fix_agent_org called")
-    from models.agent import Agent, AgentVisibility
+    from models.agent import Agent
 
     result = await db.execute(select(Agent).where(Agent.owner_org_id.is_(None)))
     agents = result.scalars().all()
@@ -213,7 +213,6 @@ async def fix_agent_org(
         creator = (await db.execute(select(User).where(User.id == agent.created_by))).scalar_one_or_none()
         if creator and creator.org_id:
             agent.owner_org_id = creator.org_id
-            agent.visibility = AgentVisibility.public
             fixed += 1
     await db.commit()
     return {"fixed": fixed, "total_checked": len(agents)}

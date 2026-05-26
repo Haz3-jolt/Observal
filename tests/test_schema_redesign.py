@@ -199,7 +199,6 @@ class TestAgentModelUpdate:
         from models.agent import Agent
 
         cols = {c.name for c in Agent.__table__.columns}
-        assert "visibility" in cols
         assert "owner_org_id" in cols
 
     def test_agent_has_version_fields(self):
