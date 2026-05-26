@@ -183,7 +183,7 @@ DEFAULTS: dict[str, str] = {
     "security.allow_draft_install": "false",
     "security.rate_limit_auth": "10/minute",
     "security.rate_limit_auth_strict": "5/minute",
-    "security.trusted_proxy_ips": "",
+    "security.trusted_proxy_ips": "172.16.0.0/12,10.0.0.0/8,192.168.0.0/16,127.0.0.1",
     # SAML
     "saml.idp_entity_id": "",
     "saml.idp_sso_url": "",
