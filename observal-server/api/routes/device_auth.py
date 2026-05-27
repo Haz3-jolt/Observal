@@ -115,7 +115,7 @@ async def device_authorize(request: Request, req: DeviceAuthRequest = None):
 
 
 @router.post("/token")
-@limiter.limit("10/minute")
+@limiter.limit("30/minute")
 async def device_token(request: Request, req: DeviceTokenRequest, db: AsyncSession = Depends(get_db)):
     """CLI polls this to check if the user approved the device code."""
     optic.debug("device_token: polling for device_code approval")
