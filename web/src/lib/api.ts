@@ -523,11 +523,15 @@ export const dashboard = {
 		status?: string;
 		platform?: string;
 		days?: number;
+		limit?: number;
+		offset?: number;
 	}) => {
 		const qs = new URLSearchParams();
 		if (params?.status) qs.set("status", params.status);
 		if (params?.platform) qs.set("platform", params.platform);
 		if (params?.days) qs.set("days", String(params.days));
+		if (params?.limit) qs.set("limit", String(params.limit));
+		if (params?.offset) qs.set("offset", String(params.offset));
 		const suffix = qs.toString() ? `?${qs}` : "";
 		return get<Session[]>(`/sessions${suffix}`);
 	},

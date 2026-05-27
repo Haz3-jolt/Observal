@@ -77,6 +77,8 @@ async def list_sessions(
     status: str | None = Query(None),
     platform: str | None = Query(None),
     days: int | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(require_role(UserRole.user)),
 ):
     optic.debug("list_sessions: status={}, platform={}", status, platform)
@@ -97,6 +99,8 @@ async def list_sessions(
         days=capped_days,
         is_admin=is_admin,
         uid=uid_str,
+        limit=limit,
+        offset=offset,
     )
 
     # Resolve user display names from PostgreSQL
@@ -181,6 +185,8 @@ async def _list_sessions_query(
     days: int | None,
     is_admin: bool,
     uid: str,
+    limit: int = 50,
+    offset: int = 0,
 ) -> list[dict]:
     """Session list from session_stats_agg FINAL.
 
@@ -223,7 +229,7 @@ async def _list_sessions_query(
         "agent_id, "
         "user_id "
         "FROM session_stats_agg FINAL " + where_clause + "ORDER BY last_event_time DESC "
-        "LIMIT 100",
+        f"LIMIT {int(limit)} OFFSET {int(offset)}",
         params or None,
     )
 

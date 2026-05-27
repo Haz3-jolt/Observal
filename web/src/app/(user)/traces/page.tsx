@@ -27,7 +27,6 @@ import {
 	useReactTable,
 	getCoreRowModel,
 	getSortedRowModel,
-	getFilteredRowModel,
 	flexRender,
 	type ColumnDef,
 	type SortingState,
@@ -41,20 +40,42 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
 import { PageHeader } from "@/components/layouts/page-header";
 import { TableSkeleton } from "@/components/shared/skeleton-layouts";
 import { ErrorState } from "@/components/shared/error-state";
 import { EmptyState } from "@/components/shared/empty-state";
 import type { Session } from "@/lib/types";
+
+// ── Search query parser (Discord-style: platform:kiro user:"John Doe") ───────
+
+function parseSearchQuery(query: string): { text: string; filters: Record<string, string> } {
+	const filters: Record<string, string> = {};
+	const tokens = query.match(/(\w+):(?:"([^"]*)"|([^\s]*))/g);
+	if (tokens) {
+		for (const token of tokens) {
+			const colonIdx = token.indexOf(":");
+			const key = token.slice(0, colonIdx).toLowerCase();
+			let value = token.slice(colonIdx + 1);
+			if (value.startsWith('"') && value.endsWith('"')) {
+				value = value.slice(1, -1);
+			}
+			const keyMap: Record<string, string> = {
+				platform: "platform",
+				ide: "platform",
+				user: "user",
+				agent: "agent",
+				model: "model",
+				days: "days",
+				status: "status",
+			};
+			const apiKey = keyMap[key];
+			if (apiKey) filters[apiKey] = value;
+		}
+	}
+	// Remaining text after removing filter tokens
+	const text = query.replace(/(\w+):(?:"[^"]*"|[^\s]*)/g, "").trim();
+	return { text, filters };
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -292,25 +313,12 @@ function SortIcon({ sorted }: { sorted: false | "asc" | "desc" }) {
 	return <ArrowUpDown className="h-3 w-3 opacity-25" />;
 }
 
-// ── Time Filter Options ──────────────────────────────────────────────
-
-const TIME_OPTIONS = [
-	{ label: "All time", value: "all" },
-	{ label: "Today", value: "1" },
-	{ label: "7 days", value: "7" },
-	{ label: "30 days", value: "30" },
-];
-
 // ── Page ─────────────────────────────────────────────────────────────
 
 export default function TracesPage() {
-	const [tab, setTab] = useState<"all" | "active">("all");
-	const [platform, setPlatform] = useState("all");
-	const [timeRange, setTimeRange] = useState("all");
 	const router = useRouter();
-
-	const daysParam = timeRange !== "all" ? parseInt(timeRange, 10) : undefined;
-	const platformParam = platform !== "all" ? platform : undefined;
+	const [page, setPage] = useState(0);
+	const PAGE_SIZE = 50;
 
 	const {
 		data: sessions,
@@ -319,9 +327,9 @@ export default function TracesPage() {
 		error,
 		refetch,
 	} = useSessions2({
-		refetchInterval: 1_000,
-		platform: platformParam,
-		days: daysParam,
+		refetchInterval: 5_000,
+		limit: PAGE_SIZE,
+		offset: page * PAGE_SIZE,
 	});
 	const { data: summary } = useSessionsSummary();
 	useSessionSubscription();
@@ -329,32 +337,10 @@ export default function TracesPage() {
 	const [sorting, setSorting] = useState<SortingState>([
 		{ id: "first_event_time", desc: true },
 	]);
-	const [globalFilter, setGlobalFilter] = useState("");
-
-	const allSessions = useMemo(() => (sessions ?? []) as Session[], [sessions]);
-	const activeCount = useMemo(
-		() => allSessions.filter((s) => s.is_active).length,
-		[allSessions],
-	);
-	const data = useMemo(
-		() =>
-			tab === "active" ? allSessions.filter((s) => s.is_active) : allSessions,
-		[allSessions, tab],
-	);
-
-	const table = useReactTable({
-		data,
-		columns,
-		state: { sorting, globalFilter },
-		onSortingChange: setSorting,
-		onGlobalFilterChange: setGlobalFilter,
-		getCoreRowModel: getCoreRowModel(),
-		getSortedRowModel: getSortedRowModel(),
-		getFilteredRowModel: getFilteredRowModel(),
-	});
-
 	const [searchValue, setSearchValue] = useState("");
+	const [globalFilter, setGlobalFilter] = useState("");
 	const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
 	const handleSearch = useCallback(
 		(value: string) => {
 			setSearchValue(value);
@@ -363,6 +349,84 @@ export default function TracesPage() {
 		},
 		[setGlobalFilter],
 	);
+
+	const allSessions = useMemo(() => (sessions ?? []) as Session[], [sessions]);
+
+	// Apply parameterized filters from search query
+	const filteredSessions = useMemo(() => {
+		const { text, filters } = parseSearchQuery(globalFilter);
+		let result = allSessions;
+
+		if (filters.platform) {
+			const p = filters.platform.toLowerCase();
+			result = result.filter(
+				(s) =>
+					(s.service_name ?? "").toLowerCase().includes(p) ||
+					(s.platform ?? "").toLowerCase().includes(p),
+			);
+		}
+		if (filters.user) {
+			const u = filters.user.toLowerCase();
+			result = result.filter((s) =>
+				(s.user_name ?? "").toLowerCase().includes(u),
+			);
+		}
+		if (filters.agent) {
+			const a = filters.agent.toLowerCase();
+			result = result.filter((s) =>
+				(s.agent_name ?? "").toLowerCase().includes(a),
+			);
+		}
+		if (filters.model) {
+			const m = filters.model.toLowerCase();
+			result = result.filter((s) =>
+				(s.model ?? "").toLowerCase().includes(m),
+			);
+		}
+		if (filters.days) {
+			const d = parseInt(filters.days, 10);
+			if (!isNaN(d) && d > 0) {
+				const cutoff = Date.now() - d * 86_400_000;
+				result = result.filter((s) =>
+					s.first_event_time && toDate(s.first_event_time).getTime() >= cutoff,
+				);
+			}
+		}
+		if (filters.status) {
+			const st = filters.status.toLowerCase();
+			if (st === "active") result = result.filter((s) => s.is_active);
+			else if (st === "inactive") result = result.filter((s) => !s.is_active);
+		}
+
+		// Free text search on session label / user / model
+		if (text) {
+			const lower = text.toLowerCase();
+			result = result.filter(
+				(s) =>
+					(s.session_id ?? "").toLowerCase().includes(lower) ||
+					(s.user_name ?? "").toLowerCase().includes(lower) ||
+					(s.agent_name ?? "").toLowerCase().includes(lower) ||
+					(s.model ?? "").toLowerCase().includes(lower) ||
+					(s.platform ?? "").toLowerCase().includes(lower),
+			);
+		}
+
+		return result;
+	}, [allSessions, globalFilter]);
+
+	const data = useMemo(
+		() => filteredSessions,
+		[filteredSessions],
+	);
+
+	const table = useReactTable({
+		data,
+		columns,
+		state: { sorting },
+		onSortingChange: setSorting,
+		getCoreRowModel: getCoreRowModel(),
+		getSortedRowModel: getSortedRowModel(),
+	});
 
 	const todaySessions = summary?.today_sessions ?? allSessions.length;
 
@@ -380,7 +444,7 @@ export default function TracesPage() {
 					<TableSkeleton rows={8} cols={8} />
 				) : isError ? (
 					<ErrorState message={error?.message} onRetry={() => refetch()} />
-				) : allSessions.length === 0 && !platformParam && !daysParam ? (
+				) : allSessions.length === 0 ? (
 					<EmptyState
 						icon={Activity}
 						title="No sessions yet"
@@ -400,71 +464,31 @@ export default function TracesPage() {
 						</div>
 
 						{/* ── Toolbar ── */}
-						<div className="flex items-center gap-3 flex-wrap">
-							<Tabs
-								value={tab}
-								onValueChange={(v) => setTab(v as "all" | "active")}
-							>
-								<TabsList>
-									<TabsTrigger value="all">
-										All
-										<span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
-											{allSessions.length}
-										</span>
-									</TabsTrigger>
-									<TabsTrigger value="active" className="gap-1.5">
-										<span className="relative flex h-2 w-2">
-											<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-											<span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-										</span>
-										Active
-										{activeCount > 0 && (
-											<Badge
-												variant="secondary"
-												className="ml-1 h-4 px-1 text-[10px] font-semibold"
-											>
-												{activeCount}
-											</Badge>
-										)}
-									</TabsTrigger>
-								</TabsList>
-							</Tabs>
-
-							<Select value={platform} onValueChange={setPlatform}>
-								<SelectTrigger className="w-40 h-9 text-sm">
-									<SelectValue placeholder="All platforms" />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="all">All platforms</SelectItem>
-									<SelectItem value="claude-code">Claude Code</SelectItem>
-									<SelectItem value="cursor">Cursor</SelectItem>
-									<SelectItem value="copilot-cli">Copilot CLI</SelectItem>
-									<SelectItem value="kiro">Kiro</SelectItem>
-								</SelectContent>
-							</Select>
-
-							<Select value={timeRange} onValueChange={setTimeRange}>
-								<SelectTrigger className="w-32 h-9 text-sm">
-									<SelectValue placeholder="All time" />
-								</SelectTrigger>
-								<SelectContent>
-									{TIME_OPTIONS.map((o) => (
-										<SelectItem key={o.value} value={o.value}>
-											{o.label}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-
-							<div className="relative max-w-xs flex-1 ml-auto">
+						<div className="flex items-center gap-3">
+							<div className="relative flex-1">
 								<Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
 								<Input
-									placeholder="Search sessions..."
+									placeholder="Search: platform:kiro user:name agent:my-agent model:sonnet days:7 status:active"
 									value={searchValue}
 									onChange={(e) => handleSearch(e.target.value)}
-									className="pl-8 h-9 text-sm"
+									className="pl-8 h-9 text-sm font-mono"
 								/>
 							</div>
+						</div>
+
+						{/* Filter hints */}
+						<div className="flex gap-1.5 flex-wrap">
+							<span className="text-[10px] text-muted-foreground">Filters:</span>
+							{["platform:", "user:", "agent:", "model:", "days:", "status:"].map((hint) => (
+								<button
+									key={hint}
+									type="button"
+									className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 font-mono transition-colors"
+									onClick={() => handleSearch(searchValue + (searchValue && !searchValue.endsWith(" ") ? " " : "") + hint)}
+								>
+									{hint}
+								</button>
+							))}
 						</div>
 
 						{/* ── Table ── */}
@@ -543,10 +567,29 @@ export default function TracesPage() {
 						</div>
 
 						{/* ── Footer ── */}
-						<p className="text-xs text-muted-foreground/70">
-							Showing {table.getFilteredRowModel().rows.length} of{" "}
-							{allSessions.length} session{allSessions.length !== 1 ? "s" : ""}
-						</p>
+						<div className="flex items-center justify-between">
+							<p className="text-xs text-muted-foreground/70">
+								Page {page + 1} · {table.getRowModel().rows.length} sessions
+							</p>
+							<div className="flex items-center gap-2">
+								<button
+									type="button"
+									className="text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+									disabled={page === 0}
+									onClick={() => setPage(page - 1)}
+								>
+									Prev
+								</button>
+								<button
+									type="button"
+									className="text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+									disabled={allSessions.length < PAGE_SIZE}
+									onClick={() => setPage(page + 1)}
+								>
+									Next
+								</button>
+							</div>
+						</div>
 					</div>
 				)}
 			</div>
