@@ -4,7 +4,7 @@
 
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { ArrowRight, Plus, Minus, RefreshCw } from "lucide-react";
 import {
 	Dialog,
@@ -423,10 +423,22 @@ export function ReviewDiffSheet({
 	onReject,
 	onOpenComponentReview,
 }: ReviewDiffSheetProps) {
+	// Defer heavy content render until after the open animation to avoid jank
+	const [ready, setReady] = useState(false);
+	useEffect(() => {
+		if (open) {
+			const id = requestAnimationFrame(() => {
+				requestAnimationFrame(() => setReady(true));
+			});
+			return () => cancelAnimationFrame(id);
+		}
+		setReady(false);
+	}, [open]);
+
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="max-w-7xl w-[95vw] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
-				{item ? (
+			<DialogContent className="max-w-7xl w-[95vw] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden will-change-transform">
+				{item && ready ? (
 					<DiffDialogBody
 						key={item.id}
 						item={item}
