@@ -15,7 +15,7 @@ import platform
 import shutil
 import time
 
-from observal_cli.cmd_support import CollectorResult
+from observal_cli.support import CollectorResult
 
 
 def system_info(flags: dict, server_response: dict) -> CollectorResult:
