@@ -38,11 +38,11 @@ def main(home: Path | None = None) -> None:
         pass
 
 
-def _read_credits_with_retry(session_id: str, home: Path | None = None, retries: int = 3) -> float | None:
-    """Read credits with brief retries for race conditions on stop events.
+def _read_credits_with_retry(session_id: str, home: Path | None = None, retries: int = 5) -> float | None:
+    """Read credits with retries for race conditions on stop events.
 
     Kiro may not have written the credits JSON by the time the stop hook fires.
-    A short sleep between retries gives Kiro time to flush the file.
+    Uses exponential backoff: 0.5s, 1s, 1.5s, 2s (~5s total wait).
     """
     import time
 
@@ -51,7 +51,7 @@ def _read_credits_with_retry(session_id: str, home: Path | None = None, retries:
         if credits is not None:
             return credits
         if attempt < retries - 1:
-            time.sleep(0.3)
+            time.sleep(0.5 * (attempt + 1))
     return None
 
 
