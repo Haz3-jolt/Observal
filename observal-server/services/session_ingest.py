@@ -18,7 +18,6 @@ import uuid as _uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 
-import structlog
 from loguru import logger as optic
 
 from services.clickhouse import insert_session_events, query_existing_for_dedup, query_session_event_count
@@ -109,9 +108,6 @@ def _extract_uuid(parsed: dict, ide: str = "claude-code") -> tuple[str | None, s
     return extractor(parsed)
 
 
-logger = structlog.get_logger(__name__)
-
-
 # ---------------------------------------------------------------------------
 # Agent ID resolution (name -> UUID)
 # ---------------------------------------------------------------------------
@@ -155,7 +151,7 @@ async def _resolve_agent_id(agent_id: str | None) -> str | None:
             row = result.scalar_one_or_none()
             if row:
                 resolved = str(row)
-                optic.debug("resolved agent name to UUID: {}={}", agent_id, resolved)
+                optic.debug("resolved agent name '{}' to UUID {}", agent_id, resolved)
                 return resolved
     except Exception as e:
         optic.warning("agent_id resolution failed: {}", e)
@@ -214,7 +210,7 @@ async def ingest_session_lines(
         An :class:`IngestResult` with ``ingested``, ``skipped``, and
         ``errors`` counts.
     """
-    optic.debug("ingest_session_lines: session_id={}, project_id={}", session_id, project_id)
+    optic.trace("ingesting session lines for session {}", session_id)
 
     # Normalize agent_id: resolve human-readable names to UUIDs so that
     # downstream queries (insights, exec dashboard) can match by UUID.
@@ -229,7 +225,7 @@ async def ingest_session_lines(
         extra = get_extra_rows(ide, session_id, project_id, user_id, agent_id, agent_version, total_credits)
         if extra:
             await insert_session_events(extra)
-        optic.debug("ingest skip: no lines provided for session={}", session_id)
+        optic.debug("no lines to ingest for session {}", session_id)
         return IngestResult(ingested=0, skipped=0, errors=0)
 
     # Pre-check: fetch (existing_offsets, existing_hashes) for this batch range.
@@ -253,7 +249,7 @@ async def ingest_session_lines(
         try:
             parsed = json.loads(raw_line)
         except (json.JSONDecodeError, ValueError) as exc:
-            logger.warning(
+            optic.warning(
                 "session_ingest_parse_error",
                 session_id=session_id,
                 line_offset=line_offset,
@@ -339,7 +335,7 @@ async def check_session_integrity(
     Queries ``SELECT count(), max(line_offset)`` for the session and
     compares against the expected values.
     """
-    optic.debug("check_session_integrity: session_id={}, project_id={}", session_id, project_id)
+    optic.trace("ingesting session lines for session {}", session_id)
     stored_count, stored_max_offset = await query_session_event_count(session_id, project_id)
     ok = stored_count == expected_line_count and stored_max_offset == expected_offset
     return IntegrityResult(

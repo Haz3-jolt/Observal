@@ -9,17 +9,15 @@
 Delegates to the enterprise insights engine (ee/observal_insights/) when
 a valid OBSERVAL_LICENSE_KEY with the "insights" feature is present.
 
-Feature availability is derived entirely from the license — no env var needed.
+Feature availability is derived entirely from the license - no env var needed.
 """
 
 import json
 
 import httpx
-import structlog
+from loguru import logger as optic
 
 from config import settings
-
-logger = structlog.get_logger(__name__)
 
 _generate = None
 _render = None
@@ -44,7 +42,7 @@ try:
 
         INSIGHTS_AVAILABLE = True
 except (ImportError, RuntimeError):
-    # ee/ not present or license invalid — degrade gracefully
+    # ee/ not present or license invalid - degrade gracefully
     pass
 
 
@@ -144,9 +142,9 @@ async def _call_bedrock(prompt: str, model_id: str, max_tokens: int = 16384) -> 
             raise RuntimeError(f"AWS credentials expired: {error_str}") from e
         # JSON parse errors (truncated output) are non-fatal, return empty
         if "JSONDecodeError" in type(e).__name__ or "Unterminated string" in error_str:
-            logger.warning("bedrock_truncated_response", error=error_str, model=model_id)
+            optic.warning("bedrock_truncated_response", error=error_str, model=model_id)
             return {}
-        logger.error("bedrock_call_failed", error=error_str, model=model_id)
+        optic.error("bedrock_call_failed", error=error_str, model=model_id)
         raise RuntimeError(f"Bedrock call failed: {error_str}") from e
 
 
@@ -166,7 +164,7 @@ async def _call_openai_compatible(prompt: str, model: str, provider: str = "") -
             content = r.json()["choices"][0]["message"]["content"]
             return json.loads(content)
         except Exception as e:
-            logger.error("llm_call_failed", error=str(e))
+            optic.error("llm_call_failed", error=str(e))
             return {}
 
 
@@ -231,7 +229,7 @@ def configure_insights():
 
 
 def licensed_features() -> list[str]:
-    """Return licensed feature list via the gate — never import ee/ directly."""
+    """Return licensed feature list via the gate - never import ee/ directly."""
     if not INSIGHTS_AVAILABLE:
         return []
     try:

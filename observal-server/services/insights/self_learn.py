@@ -23,7 +23,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-import structlog
+from loguru import logger as optic
 from sqlalchemy import select
 
 if TYPE_CHECKING:
@@ -37,8 +37,6 @@ from models.prompt import PromptListing, PromptVersion
 from models.skill import SkillListing, SkillVersion
 from models.user import User
 from services.versioning import bump_version
-
-logger = structlog.get_logger(__name__)
 
 # Separator appended before auto-generated additions to the system prompt
 _SELF_LEARN_SEPARATOR = "\n\n# ── Auto-learned from Insights ──\n"
@@ -190,7 +188,7 @@ async def apply_insight_suggestions(
 
     await db.commit()
 
-    logger.info(
+    optic.info(
         "self_learn_applied",
         report_id=report_id,
         agent=agent.name,
@@ -310,7 +308,7 @@ async def _create_agent_version_with_additions(
     latest_version = latest_result.scalar_one_or_none()
 
     if not latest_version:
-        logger.warning("self_learn_no_approved_version", agent=agent.name)
+        optic.warning("self_learn_no_approved_version", agent=agent.name)
         return None
 
     # Build the new prompt with additions
@@ -344,7 +342,7 @@ async def _create_agent_version_with_additions(
             if not (await db.execute(dup_stmt)).scalar_one_or_none():
                 break
         else:
-            logger.error("self_learn_version_exhaustion", agent=agent.name)
+            optic.error("self_learn_version_exhaustion", agent=agent.name)
             return None
 
     total_linked = len(linked_skill_ids or []) + len(linked_hook_ids or []) + len(linked_prompt_ids or [])
@@ -622,7 +620,7 @@ async def _create_skill_listing(
             supported_ides=["claude-code", "kiro", "pi"],
         )
     except ValidationError as e:
-        logger.warning("self_learn_skill_validation_failed", name=name, errors=str(e))
+        optic.warning("self_learn_skill_validation_failed", name=name, errors=str(e))
         return None
 
     # Check for existing
@@ -741,7 +739,7 @@ async def _create_hook_listing(
             supported_ides=["claude-code", "kiro", "pi"],
         )
     except ValidationError as e:
-        logger.warning("self_learn_hook_validation_failed", name=name, errors=str(e))
+        optic.warning("self_learn_hook_validation_failed", name=name, errors=str(e))
         return None
 
     # Check for existing
@@ -921,7 +919,7 @@ async def _create_prompt_listing(
             supported_ides=[],
         )
     except ValidationError as e:
-        logger.warning("self_learn_prompt_validation_failed", name=name, errors=str(e))
+        optic.warning("self_learn_prompt_validation_failed", name=name, errors=str(e))
         return None
 
     # Check for existing

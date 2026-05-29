@@ -11,7 +11,6 @@ import asyncio
 import time
 import uuid
 
-import structlog
 from loguru import logger as optic
 from sqlalchemy import select
 
@@ -21,14 +20,12 @@ from models.organization import Organization
 from models.user import User
 from services.redis import get_redis, subscribe
 
-logger = structlog.get_logger(__name__)
-
 INVALIDATION_CHANNEL = "observal:registry_invalidate"
 _REFRESH_INTERVAL = 60  # seconds
-_USER_ORG_TTL = 300  # seconds — evict stale user->org mappings
+_USER_ORG_TTL = 300  # seconds - evict stale user->org mappings
 _USER_ORG_MAX_SIZE = 10_000  # max entries before forced eviction
 
-# In-memory caches — replaced atomically (never mutated in-place)
+# In-memory caches - replaced atomically (never mutated in-place)
 _registered_agents: dict[uuid.UUID, set[str]] = {}  # org_id -> {agent_names}
 _org_toggle: dict[uuid.UUID, bool] = {}  # org_id -> registered_agents_only
 _user_org_map: dict[str, tuple[uuid.UUID | None, float]] = {}  # user_id -> (org_id, timestamp)
@@ -63,17 +60,17 @@ async def _refresh_all() -> None:
             for org_id, name in result.all():
                 new_agents.setdefault(org_id, set()).add(name)
 
-        # Atomic swap — readers see old or new, never empty
+        # Atomic swap - readers see old or new, never empty
         _org_toggle = new_toggle
         _registered_agents = new_agents
 
-        logger.debug(
+        optic.debug(
             "registry_cache_refreshed",
             orgs=len(_org_toggle),
             agents_orgs=len(_registered_agents),
         )
     except Exception:
-        logger.exception("registry_cache_refresh_failed")
+        optic.error("failed to refresh agent registry cache - stale data may be served")
 
 
 async def _periodic_refresh() -> None:
@@ -91,12 +88,12 @@ async def _listen_for_invalidation() -> None:
     except asyncio.CancelledError:
         pass
     except Exception:
-        logger.exception("registry_cache_subscriber_error")
+        optic.error("registry cache subscriber crashed - cache will not auto-update")
 
 
 async def start() -> None:
     """Start background refresh and invalidation listener tasks."""
-    optic.debug("agent_registry_cache starting")
+    optic.debug("starting agent registry cache background refresh")
     global _refresh_task, _subscriber_task
     if _refresh_task is None or _refresh_task.done():
         _refresh_task = asyncio.create_task(_periodic_refresh())
@@ -106,7 +103,7 @@ async def start() -> None:
 
 async def stop() -> None:
     """Cancel background tasks."""
-    optic.debug("agent_registry_cache stopping")
+    optic.debug("stopping agent registry cache")
     global _refresh_task, _subscriber_task
     if _refresh_task and not _refresh_task.done():
         _refresh_task.cancel()
@@ -140,7 +137,7 @@ async def resolve_user_org(user_id: str) -> uuid.UUID | None:
         org_id, ts = cached_entry
         if now - ts < _USER_ORG_TTL:
             return org_id
-        # Expired — fall through to refresh
+        # Expired - fall through to refresh
 
     # Try Redis cache first
     r = get_redis()

@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from loguru import logger
+from loguru import logger as optic
 
 from schemas.ide_registry import IDE_REGISTRY
 from services.ide import ConfigContext, register_adapter
@@ -21,11 +21,10 @@ class KiroAdapter:
 
     @property
     def ide_name(self) -> str:
-        logger.debug("ide_name called")
         return "kiro"
 
     def format_config(self, ctx: ConfigContext) -> dict:
-        logger.debug("format_config: ctx={}", ctx)
+        optic.trace("ctx={}", ctx)
         safe_name = ctx.safe_name
         options = ctx.options
         platform = ctx.platform
