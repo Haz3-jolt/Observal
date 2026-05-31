@@ -13,7 +13,10 @@ def get_python_licenses() -> list[dict]:
     """Get Python dependency licenses via pip-licenses."""
     result = subprocess.run(
         [
-            "uv", "run", "--with", "pip-licenses",
+            "uv",
+            "run",
+            "--with",
+            "pip-licenses",
             "pip-licenses",
             "--format=json",
             "--with-urls",
@@ -35,10 +38,13 @@ def get_node_licenses() -> list[dict]:
     format_path = str(Path(__file__).parent / "license-format.json")
     result = subprocess.run(
         [
-            "pnpm", "dlx", "license-checker-rspack",
+            "pnpm",
+            "dlx",
+            "license-checker-rspack",
             "--json",
             "--production",
-            "--customPath", format_path,
+            "--customPath",
+            format_path,
         ],
         capture_output=True,
         text=True,
@@ -50,24 +56,26 @@ def get_node_licenses() -> list[dict]:
     raw = json.loads(result.stdout)
     packages = []
     for name, info in raw.items():
-        packages.append({
-            "Name": name,
-            "License": info.get("licenses", "Unknown"),
-            "URL": info.get("repository", ""),
-            "LicenseText": info.get("licenseText", ""),
-        })
+        packages.append(
+            {
+                "Name": name,
+                "License": info.get("licenses", "Unknown"),
+                "URL": info.get("repository", ""),
+                "LicenseText": info.get("licenseText", ""),
+            }
+        )
     return packages
 
 
 def generate_notices(python_pkgs: list[dict], node_pkgs: list[dict], output: str):
     """Write the combined THIRD_PARTY_NOTICES.md file."""
-    from datetime import datetime, timezone
+    from datetime import UTC, datetime
 
     with open(output, "w") as f:
         f.write("# Third-Party Notices\n\n")
         f.write("This file lists all third-party dependencies used by Observal,\n")
         f.write("along with their respective licenses.\n\n")
-        f.write(f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}\n\n")
+        f.write(f"Generated: {datetime.now(UTC).strftime('%Y-%m-%d')}\n\n")
         f.write("---\n\n")
 
         # Python dependencies
@@ -101,7 +109,8 @@ def generate_notices(python_pkgs: list[dict], node_pkgs: list[dict], output: str
         f.write("where available.\n\n")
 
         apache_pkgs = [
-            p for p in python_pkgs + node_pkgs
+            p
+            for p in python_pkgs + node_pkgs
             if "Apache" in p.get("License", "") or "apache" in p.get("License", "").lower()
         ]
         for pkg in sorted(apache_pkgs, key=lambda p: p.get("Name", "").lower()):

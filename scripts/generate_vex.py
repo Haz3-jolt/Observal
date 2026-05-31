@@ -5,7 +5,7 @@
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def main():
@@ -15,7 +15,7 @@ def main():
     with open(source) as f:
         vex = json.load(f)
 
-    vex["timestamp"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    vex["timestamp"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     with open(output, "w") as f:
         json.dump(vex, f, indent=2)
