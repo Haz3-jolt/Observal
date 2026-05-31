@@ -1,6 +1,6 @@
 {
   "@context": "https://openvex.dev/ns/v0.2.0",
-  "@id": "https://github.com/BlazeUp-AI/Observal/.github/vex/observal.vex.json",
+  "@id": "https://github.com/BlazeUp-AI/Observal/blob/main/.github/vex/observal.vex.json",
   "author": "Observal Security <contact@observal.io>",
   "timestamp": "2026-05-31T00:00:00Z",
   "version": 1,
@@ -19,7 +19,7 @@
         }
       ],
       "status": "not_affected",
-      "justification": "vulnerable_code_not_reachable",
+      "justification": "vulnerable_code_not_in_execute_path",
       "impact_statement": "Observal does not use the affected Starlette multipart form parsing path that triggers this vulnerability. All file uploads are handled via dedicated streaming endpoints with size limits enforced at the nginx layer."
     },
     {
@@ -36,7 +36,7 @@
         }
       ],
       "status": "not_affected",
-      "justification": "vulnerable_code_not_reachable",
+      "justification": "vulnerable_code_not_in_execute_path",
       "impact_statement": "The affected code path requires specific Host header manipulation that is blocked by Observal's nginx reverse proxy configuration (see docker/nginx.conf header validation rules)."
     }
   ]

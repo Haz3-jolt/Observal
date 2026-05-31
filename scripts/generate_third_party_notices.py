@@ -9,6 +9,11 @@ import sys
 from pathlib import Path
 
 
+def _escape_md(text: str) -> str:
+    """Escape pipe characters for markdown table cells."""
+    return text.replace("|", "\\|")
+
+
 def get_python_licenses() -> list[dict]:
     """Get Python dependency licenses via pip-licenses."""
     result = subprocess.run(
@@ -30,7 +35,11 @@ def get_python_licenses() -> list[dict]:
     if result.returncode != 0:
         print(f"Warning: pip-licenses failed: {result.stderr}", file=sys.stderr)
         return []
-    return json.loads(result.stdout)
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        print("Warning: pip-licenses output is not valid JSON", file=sys.stderr)
+        return []
 
 
 def get_node_licenses() -> list[dict]:
@@ -53,7 +62,11 @@ def get_node_licenses() -> list[dict]:
     if result.returncode != 0:
         print(f"Warning: license-checker failed: {result.stderr}", file=sys.stderr)
         return []
-    raw = json.loads(result.stdout)
+    try:
+        raw = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        print("Warning: license-checker output is not valid JSON", file=sys.stderr)
+        return []
     packages = []
     for name, info in raw.items():
         packages.append(
@@ -83,9 +96,9 @@ def generate_notices(python_pkgs: list[dict], node_pkgs: list[dict], output: str
         f.write("| Package | License | URL |\n")
         f.write("|---------|---------|-----|\n")
         for pkg in sorted(python_pkgs, key=lambda p: p.get("Name", "").lower()):
-            name = pkg.get("Name", "")
-            license_name = pkg.get("License", "Unknown")
-            url = pkg.get("URL", "")
+            name = _escape_md(pkg.get("Name", ""))
+            license_name = _escape_md(pkg.get("License", "Unknown"))
+            url = _escape_md(pkg.get("URL", ""))
             f.write(f"| {name} | {license_name} | {url} |\n")
 
         f.write("\n---\n\n")
@@ -95,9 +108,9 @@ def generate_notices(python_pkgs: list[dict], node_pkgs: list[dict], output: str
         f.write("| Package | License | URL |\n")
         f.write("|---------|---------|-----|\n")
         for pkg in sorted(node_pkgs, key=lambda p: p.get("Name", "").lower()):
-            name = pkg.get("Name", "")
-            license_name = pkg.get("License", "Unknown")
-            url = pkg.get("URL", "")
+            name = _escape_md(pkg.get("Name", ""))
+            license_name = _escape_md(pkg.get("License", "Unknown"))
+            url = _escape_md(pkg.get("URL", ""))
             f.write(f"| {name} | {license_name} | {url} |\n")
 
         f.write("\n---\n\n")
@@ -108,11 +121,7 @@ def generate_notices(python_pkgs: list[dict], node_pkgs: list[dict], output: str
         f.write("As required by Section 4(d), their NOTICE files are reproduced below\n")
         f.write("where available.\n\n")
 
-        apache_pkgs = [
-            p
-            for p in python_pkgs + node_pkgs
-            if "Apache" in p.get("License", "") or "apache" in p.get("License", "").lower()
-        ]
+        apache_pkgs = [p for p in python_pkgs + node_pkgs if "apache" in p.get("License", "").lower()]
         for pkg in sorted(apache_pkgs, key=lambda p: p.get("Name", "").lower()):
             name = pkg.get("Name", "")
             license_text = pkg.get("LicenseText", "")
