@@ -170,6 +170,24 @@ async def _publish_version(
     )
     for field_name, value in extra_fields.items():
         setattr(ver, field_name, value)
+
+    # Auto-snapshot content from listing when not explicitly provided in extras.
+    # This ensures each version preserves the content at publish time.
+    _CONTENT_FIELDS = {
+        "skill": ["skill_md_content", "script_content", "script_filename", "delivery_mode",
+                  "git_url", "git_ref", "skill_path", "task_type"],
+        "hook": ["hook_content", "script_content", "handler_type", "event",
+                 "git_url", "git_ref"],
+        "prompt": ["template", "category"],
+        "mcp": ["git_url", "git_ref", "command", "args", "url", "transport"],
+        "sandbox": ["dockerfile_content", "git_url", "git_ref"],
+    }
+    for field in _CONTENT_FIELDS.get(component_type, []):
+        if field not in extra_fields and hasattr(listing, field):
+            listing_val = getattr(listing, field, None)
+            if listing_val is not None and hasattr(ver, field):
+                setattr(ver, field, listing_val)
+
     db.add(ver)
     await db.commit()
 

@@ -64,6 +64,7 @@ from api.routes.sandbox import router as sandbox_router
 from api.routes.sessions import router as sessions_router
 from api.routes.skill import router as skill_router
 from api.routes.support import router as support_router
+from api.routes.layer_snapshot import router as layer_snapshot_router
 from api.routes.telemetry import router as telemetry_router
 from config import HAS_LICENSE, check_legacy_env_vars, settings
 from database import engine
@@ -445,6 +446,7 @@ app.include_router(co_authors_router)
 app.include_router(config_router)
 app.include_router(registry_models_router)
 app.include_router(support_router)
+app.include_router(layer_snapshot_router)
 app.include_router(logs_stream_router)
 # Audit CLI event endpoint (license-gated internally, mounted always so
 # CLI gets a clean 200 "skipped" response rather than 404 when unlicensed)
