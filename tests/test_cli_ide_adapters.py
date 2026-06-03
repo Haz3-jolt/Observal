@@ -309,18 +309,19 @@ class TestShimStatus:
 class TestFeatureGating:
     """Test that IDE_Registry feature flags gate method access."""
 
-    def test_codex_lacks_hooks_raises_on_get_hook_spec(self):
+    def test_codex_has_hooks_allows_get_hook_spec(self):
         adapter = get_adapter("codex")
-        with pytest.raises(NotSupported, match="does not support get_hook_spec"):
-            adapter.get_hook_spec()
+        spec = adapter.get_hook_spec()
+        assert isinstance(spec, HookSpec)
+        assert "UserPromptSubmit" in spec.events
 
-    def test_codex_lacks_hooks_raises_on_detect_hooks(self):
+    def test_codex_has_hooks_allows_detect_hooks(self):
         import tempfile
         from pathlib import Path
 
         adapter = get_adapter("codex")
-        with pytest.raises(NotSupported, match="does not support detect_hooks"):
-            adapter.detect_hooks(Path(tempfile.mkdtemp()))
+        result = adapter.detect_hooks(Path(tempfile.mkdtemp()))
+        assert result in ("installed", "missing")
 
     def test_codex_has_mcp_servers_allows_scan_home(self):
         import tempfile

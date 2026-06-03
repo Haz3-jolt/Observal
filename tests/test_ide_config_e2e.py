@@ -89,7 +89,7 @@ class TestConstants:
 
     def test_codex_feature_matrix(self):
         assert "codex" in IDE_FEATURE_MATRIX
-        assert IDE_FEATURE_MATRIX["codex"] == {"mcp_servers"}
+        assert IDE_FEATURE_MATRIX["codex"] == {"mcp_servers", "hooks", "skills"}
 
     def test_copilot_feature_matrix(self):
         assert "copilot" in IDE_FEATURE_MATRIX
@@ -511,14 +511,15 @@ class TestIdeCompatibilityWarnings:
         agent = _make_agent()
         agent.required_ide_features = ["skills", "hooks"]
         warnings = _check_ide_compatibility(agent, "codex")
-        assert len(warnings) == 2
+        # Codex now supports hooks and skills
+        assert len(warnings) == 0
 
     def test_codex_warns_on_skills_requirement(self):
         agent = _make_agent()
         agent.required_ide_features = ["skills"]
         warnings = _check_ide_compatibility(agent, "codex")
-        assert len(warnings) > 0
-        assert any("skill" in w.lower() for w in warnings)
+        # Codex now supports skills
+        assert len(warnings) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════

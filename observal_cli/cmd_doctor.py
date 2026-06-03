@@ -612,6 +612,9 @@ def doctor_patch(
             elif target == "pi":
                 changed = _patch_pi(dry_run)
                 any_changes = any_changes or changed
+            elif target == "codex":
+                changed = _patch_codex(dry_run)
+                any_changes = any_changes or changed
 
         # ── Shims (all IDEs with home MCP config) ──
         if do_shims:
@@ -832,4 +835,101 @@ def _patch_pi(dry_run: bool) -> bool:
     verb = "Would install" if dry_run else "Installed"
     rprint(f"  {verb} {package_spec} in {settings_path}")
     rprint("  [dim]Restart pi or run /reload to activate[/dim]")
+    return True
+
+
+def _patch_codex(dry_run: bool) -> bool:
+    """Install session push hooks into ~/.codex/hooks.json and enable codex_hooks flag."""
+    optic.debug("_patch_codex: dry_run={}", dry_run)
+    from observal_cli.ide_specs.codex_hooks_spec import build_codex_hooks
+
+    rprint("[cyan]Codex - session push hooks[/cyan]")
+
+    codex_dir = Path.home() / ".codex"
+    hooks_path = codex_dir / "hooks.json"
+    config_path = codex_dir / "config.toml"
+
+    desired = build_codex_hooks()
+
+    # Load existing hooks.json if present
+    existing: dict = {}
+    if hooks_path.exists():
+        try:
+            existing = json.loads(hooks_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Check if already patched
+    existing_hooks = existing.get("hooks", {})
+    needs_update = False
+
+    for event in ("UserPromptSubmit", "Stop"):
+        groups = existing_hooks.get(event, [])
+        has_observal = any(
+            "codex_session_push" in h.get("command", "")
+            for g in groups
+            if isinstance(g, dict)
+            for h in g.get("hooks", [])
+            if isinstance(h, dict)
+        )
+        if not has_observal:
+            needs_update = True
+            break
+
+    # Also check if codex_hooks flag needs enabling
+    needs_flag = False
+    if config_path.exists():
+        try:
+            content = config_path.read_text()
+            if "codex_hooks" not in content or "codex_hooks = false" in content:
+                needs_flag = True
+        except OSError:
+            needs_flag = True
+    else:
+        needs_flag = True
+
+    if not needs_update and not needs_flag:
+        rprint("  [dim]Already up to date[/dim]")
+        return False
+
+    # Merge hooks: preserve non-Observal hooks, add ours
+    if needs_update:
+        merged_hooks = existing_hooks.copy()
+        for event, desired_groups in desired["hooks"].items():
+            current = merged_hooks.get(event, [])
+            # Remove old Observal hook groups
+            cleaned = [
+                g
+                for g in current
+                if not isinstance(g, dict)
+                or not any("session_push" in h.get("command", "") for h in g.get("hooks", []) if isinstance(h, dict))
+            ]
+            merged_hooks[event] = cleaned + desired_groups
+
+        result = {"hooks": merged_hooks}
+
+        if not dry_run:
+            codex_dir.mkdir(parents=True, exist_ok=True)
+            hooks_path.write_text(json.dumps(result, indent=2) + "\n")
+
+        verb = "Would install" if dry_run else "Installed"
+        rprint(f"  {verb} hooks in {hooks_path}")
+
+    # Enable codex_hooks flag in config.toml
+    if needs_flag:
+        if not dry_run:
+            codex_dir.mkdir(parents=True, exist_ok=True)
+            if config_path.exists():
+                content = config_path.read_text()
+                if "codex_hooks = false" in content:
+                    content = content.replace("codex_hooks = false", "codex_hooks = true")
+                elif "codex_hooks" not in content:
+                    content = f"codex_hooks = true\n{content}"
+                config_path.write_text(content)
+            else:
+                config_path.write_text("codex_hooks = true\n")
+
+        verb = "Would enable" if dry_run else "Enabled"
+        rprint(f"  {verb} codex_hooks flag in {config_path}")
+
     return True

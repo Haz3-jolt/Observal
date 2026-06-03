@@ -55,10 +55,29 @@ def _usage_pi(parsed: dict) -> dict:
     }
 
 
+def _usage_codex(parsed: dict) -> dict:
+    """Codex: event_msg/token_count has payload.info.total_token_usage."""
+    payload = parsed.get("payload", {})
+    if not isinstance(payload, dict):
+        return {"input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0, "cache_write_tokens": 0, "model": ""}
+    info = payload.get("info", {})
+    if not isinstance(info, dict):
+        info = {}
+    usage = info.get("last_token_usage") or info.get("total_token_usage") or {}
+    return {
+        "input_tokens": int(usage.get("input_tokens") or 0),
+        "output_tokens": int(usage.get("output_tokens") or 0),
+        "cache_read_tokens": int(usage.get("cached_input_tokens") or 0),
+        "cache_write_tokens": 0,
+        "model": "",
+    }
+
+
 _UsageFn = Callable[[dict], dict]
 
 _USAGE_EXTRACTORS: dict[str, _UsageFn] = {
     "claude-code": _usage_claude_code,
+    "codex": _usage_codex,
     "kiro": _usage_claude_code,
     "cursor": _usage_claude_code,
     "pi": _usage_pi,

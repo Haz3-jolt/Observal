@@ -469,6 +469,125 @@ def _tool_info_pi(parsed: dict) -> tuple[str | None, str | None]:
 
 
 # ---------------------------------------------------------------------------
+# Codex classifier
+# ---------------------------------------------------------------------------
+
+
+def _classify_codex(parsed: dict) -> str | None:
+    """Classify one Codex CLI JSONL line.
+
+    Codex uses:
+    - {"type": "event_msg", "payload": {"type": "user_message|agent_message|..."}}
+    - {"type": "response_item", "payload": {"role": "user|assistant|developer", "content": [...]}}
+    - {"type": "session_meta"} / {"type": "turn_context"}
+    """
+    line_type = parsed.get("type", "")
+
+    if line_type == "event_msg":
+        payload_type = parsed.get("payload", {}).get("type", "")
+        if payload_type == "user_message":
+            return "user_prompt"
+        if payload_type == "agent_message":
+            return "assistant_text"
+        if payload_type == "token_count":
+            return "meta"  # stored for token aggregation
+        if payload_type in ("task_started", "task_complete"):
+            return "system"
+        return "system"
+
+    if line_type == "response_item":
+        payload = parsed.get("payload", {})
+        role = payload.get("role", "")
+        content = payload.get("content", [])
+        payload_type = payload.get("type", "")
+
+        # Direct function_call / function_call_output at payload level
+        if payload_type == "function_call":
+            return "tool_call"
+        if payload_type == "function_call_output":
+            return "tool_result"
+
+        if role == "user":
+            return "system"  # Injected context (AGENTS.md, permissions), not real user input
+        if role == "assistant":
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict):
+                        btype = block.get("type", "")
+                        if btype == "function_call":
+                            return "tool_call"
+                        if btype == "function_call_output":
+                            return "tool_result"
+            return "assistant_text"
+        if role == "developer":
+            return "system"
+        # response_item with empty role (function_call_output at top level)
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "function_call_output":
+                    return "tool_result"
+        return "system"
+
+    if line_type in ("session_meta", "turn_context"):
+        return "system"
+
+    return "system"
+
+
+def _preview_codex(parsed: dict, event_type: str) -> str:
+    """Extract preview from Codex CLI JSONL."""
+    try:
+        line_type = parsed.get("type", "")
+
+        if line_type == "event_msg":
+            payload = parsed.get("payload", {})
+            payload_type = payload.get("type", "")
+            if payload_type == "user_message":
+                return str(payload.get("message", ""))[:_PREVIEW_MAX]
+            if payload_type == "agent_message":
+                return str(payload.get("message", ""))[:_PREVIEW_MAX]
+            return ""
+
+        if line_type == "response_item":
+            payload = parsed.get("payload", {})
+            content = payload.get("content", [])
+            if isinstance(content, list):
+                parts: list[str] = []
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    btype = block.get("type", "")
+                    if btype in ("input_text", "output_text"):
+                        parts.append(block.get("text", "")[:_PREVIEW_MAX])
+                    elif btype == "function_call":
+                        parts.append(f"[tool_call: {block.get('name', '')}]")
+                    elif btype == "function_call_output":
+                        output = block.get("output", "")
+                        parts.append(str(output)[:_PREVIEW_MAX])
+                return " ".join(parts)[:_PREVIEW_MAX]
+    except Exception:
+        pass
+    return ""
+
+
+def _tool_info_codex(parsed: dict) -> tuple[str | None, str | None]:
+    """Extract (tool_name, tool_id) from a Codex JSONL line."""
+    if parsed.get("type") != "response_item":
+        return None, None
+    payload = parsed.get("payload", {})
+    # Direct function_call at payload level
+    if payload.get("type") == "function_call":
+        return payload.get("name"), payload.get("call_id")
+    # Nested in content array
+    content = payload.get("content", [])
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "function_call":
+                return block.get("name"), block.get("call_id")
+    return None, None
+
+
+# ---------------------------------------------------------------------------
 # Registry  -- add new parsers here, update ide_registry.py session_parser key
 # ---------------------------------------------------------------------------
 
@@ -480,6 +599,7 @@ _Classifier = tuple[_ClassifyFn, _PreviewFn, _ToolInfoFn]
 # Maps session_parser ID -> (classify_fn, preview_fn, tool_info_fn)
 _CLASSIFIERS: dict[str, _Classifier] = {
     "claude-code": (_classify_claude_code, _preview_claude_code, _tool_info_claude_code),
+    "codex": (_classify_codex, _preview_codex, _tool_info_codex),
     "kiro": (_classify_kiro, _preview_kiro, _tool_info_kiro),
     "cursor": (_classify_cursor, _preview_cursor, _tool_info_cursor),
     "pi": (_classify_pi, _preview_pi, _tool_info_pi),
@@ -584,6 +704,7 @@ def _ts_pi(parsed: dict) -> str | None:
 
 _TS_EXTRACTORS: dict[str, object] = {
     "claude-code": _ts_claude_code,
+    "codex": _ts_claude_code,  # Codex uses same timestamp format as Claude Code
     "kiro": _ts_kiro,
     "cursor": _ts_cursor,
     "pi": _ts_pi,
@@ -623,6 +744,7 @@ _ExtraRowsFn = Callable[..., list[dict]]
 _EXTRA_ROWS_HANDLERS: dict[str, _ExtraRowsFn] = {
     "kiro": _kiro_extra_rows,
     "claude-code": _no_extra_rows,
+    "codex": _no_extra_rows,
     "cursor": _no_extra_rows,
     "pi": _no_extra_rows,
 }
