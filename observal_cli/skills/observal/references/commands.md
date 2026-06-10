@@ -58,6 +58,9 @@ Every command available in the installed CLI. This block is generated from the T
   - `observal agent show`: Show full agent details.
   - `observal agent unarchive`: Restore an archived agent back to active status.
   - `observal agent versions`: List all versions for an agent.
+  - `observal agent co-authors list`: List co-authors for an agent.
+  - `observal agent co-authors add`: Add a co-author to an agent.
+  - `observal agent co-authors remove`: Remove a co-author from an agent.
 
 **`observal auth`**: Authentication and account commands
 
@@ -67,12 +70,6 @@ Every command available in the installed CLI. This block is generated from the T
   - `observal auth status`: Check server connectivity and health.
   - `observal auth change-password`: Change your password.
   - `observal auth set-username`: Set or update your username.
-
-**`observal co-authors`**: Manage co-authors for agents and components
-
-  - `observal co-authors add`: Add a co-author to an agent or component.
-  - `observal co-authors list`: List co-authors for an agent or component.
-  - `observal co-authors remove`: Remove a co-author from an agent or component.
 
 **`observal config`**: CLI configuration
 
@@ -119,6 +116,7 @@ Every command available in the installed CLI. This block is generated from the T
   - `observal registry hook list`: List approved hooks from the registry.
   - `observal registry hook show`: Show detailed information for a single hook.
   - `observal registry hook submit`: Submit a new hook for review.
+  - `observal registry hook co-authors list|add|remove`: Manage co-authors.
 - `observal registry mcp`: MCP server registry commands
   - `observal registry mcp submit`: Submit an MCP server to the registry.
   - `observal registry mcp show`: Show full details of an MCP server.
@@ -127,24 +125,25 @@ Every command available in the installed CLI. This block is generated from the T
   - `observal registry mcp edit`: Edit an MCP server submission.
   - `observal registry mcp list`: List approved MCP servers in the registry.
   - `observal registry mcp my`: List your own MCP servers across all statuses.
+  - `observal registry mcp co-authors list|add|remove`: Manage co-authors.
 - `observal registry models`: Inspect the model catalog (live from models.dev with offline fallback).
   - `observal registry models list`: Show models from the registry.
 - `observal registry prompt`: Prompt registry commands
   - `observal registry prompt delete`: Delete a prompt from the registry.
   - `observal registry prompt edit`: Edit a draft, rejected, or pending prompt submission.
-  - `observal registry prompt install`: Generate IDE install configuration for a prompt.
   - `observal registry prompt list`: List approved prompts in the registry.
   - `observal registry prompt my`: List your own prompts across all statuses.
   - `observal registry prompt render`: Render a prompt template with variable substitution.
   - `observal registry prompt show`: Show detailed information about a prompt.
   - `observal registry prompt submit`: Submit a new prompt template for review.
+  - `observal registry prompt co-authors list|add|remove`: Manage co-authors.
 - `observal registry sandbox`: Sandbox registry commands
   - `observal registry sandbox delete`: Delete a sandbox from the registry.
   - `observal registry sandbox edit`: Edit a draft, rejected, or pending sandbox submission.
-  - `observal registry sandbox install`: Generate IDE install configuration for a sandbox.
   - `observal registry sandbox list`: List approved sandboxes in the registry.
   - `observal registry sandbox show`: Show detailed information about a sandbox.
   - `observal registry sandbox submit`: Submit a new sandbox environment for review.
+  - `observal registry sandbox co-authors list|add|remove`: Manage co-authors.
 - `observal registry skill`: Skill registry commands
   - `observal registry skill delete`: Delete a skill from the registry.
   - `observal registry skill edit`: Edit a draft, rejected, or pending skill submission.
@@ -153,6 +152,7 @@ Every command available in the installed CLI. This block is generated from the T
   - `observal registry skill my`: List your own skills across all statuses.
   - `observal registry skill show`: Show detailed information about a skill.
   - `observal registry skill submit`: Submit a new skill for review.
+  - `observal registry skill co-authors list|add|remove`: Manage co-authors.
 - `observal registry version`: Manage component versions
   - `observal registry version list`: List version history for a registry component.
   - `observal registry version publish`: Publish a new version for a registry component.
