@@ -185,6 +185,8 @@ async def install_hook(
             raise HTTPException(status_code=404, detail="Listing not found or not approved")
 
     db.add(HookDownload(listing_id=listing.id, user_id=current_user.id, ide=req.ide))
+    if listing.latest_version:
+        listing.latest_version.download_count += 1
     await db.commit()
 
     from services.hook_install_generator import generate_hook_install_config

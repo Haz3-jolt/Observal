@@ -284,6 +284,8 @@ async def install_skill(
             )
 
     db.add(SkillDownload(listing_id=listing.id, user_id=current_user.id, ide=req.ide))
+    if listing.latest_version:
+        listing.latest_version.download_count += 1
     await db.commit()
 
     from api.routes.config import derive_endpoints

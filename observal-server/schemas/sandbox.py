@@ -114,11 +114,3 @@ class SandboxListingSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class SandboxInstallRequest(BaseModel):
-    ide: str
-
-
-class SandboxInstallResponse(BaseModel):
-    listing_id: uuid.UUID
-    ide: str
-    config_snippet: dict

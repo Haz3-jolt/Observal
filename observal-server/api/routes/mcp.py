@@ -276,6 +276,8 @@ async def install_mcp(
             raise HTTPException(status_code=404, detail="Listing not found or not approved")
 
     db.add(McpDownload(listing_id=listing.id, user_id=current_user.id, ide=req.ide))
+    if listing.latest_version:
+        listing.latest_version.download_count += 1
     await db.commit()
 
     from api.routes.config import derive_endpoints
