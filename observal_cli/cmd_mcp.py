@@ -1204,6 +1204,40 @@ def _delete_impl(mcp_id, yes):
 # ── Canonical commands (on mcp_app) ─────────────────────────
 
 
+def _print_mcp_examples() -> None:
+    console.print_json(
+        json.dumps(
+            {
+                "filesystem": {
+                    "mcpServers": {
+                        "filesystem": {
+                            "command": "npx",
+                            "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/dev/project"],
+                        }
+                    }
+                },
+                "git": {
+                    "mcpServers": {
+                        "git": {
+                            "command": "uvx",
+                            "args": ["mcp-server-git", "--repository", "/home/dev/project"],
+                        }
+                    }
+                },
+                "postgres": {
+                    "mcpServers": {
+                        "postgres": {
+                            "command": "npx",
+                            "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"],
+                        }
+                    }
+                },
+            },
+            indent=2,
+        )
+    )
+
+
 @mcp_app.command()
 def submit(
     git_url: str = typer.Option(None, "--git", "-g", help="Optional git repo for local OCI setup detection"),
@@ -1213,6 +1247,7 @@ def submit(
     config: bool = typer.Option(False, "--config", hidden=True, help="(deprecated) JSON paste is now the default"),
     draft: bool = typer.Option(False, "--draft", help="Save as draft instead of submitting for review"),
     submit_draft: str | None = typer.Option(None, "--submit", help="Submit a draft for review (MCP ID)"),
+    example: bool = typer.Option(False, "--example", help="Print example MCP configs and exit"),
 ):
     """Submit an MCP server to the registry.
 
@@ -1244,6 +1279,9 @@ def submit(
         # Submit an existing draft for review
         observal registry mcp submit --submit my-server
     """
+    if example:
+        _print_mcp_examples()
+        return
     if draft and submit_draft:
         rprint(
             "[red]Cannot use --draft and --submit together.[/red] Use --draft to save a new draft, or --submit to submit an existing draft."

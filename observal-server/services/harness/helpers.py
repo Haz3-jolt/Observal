@@ -268,14 +268,18 @@ def _build_sandbox_mcp_entry(sandbox_listings: dict, harness: str) -> dict:
 
     sandboxes_json = []
     for _lid, listing in sandbox_listings.items():
+        resource_limits = getattr(listing, "resource_limits", {}) or {}
         sandboxes_json.append(
             {
                 "id": str(_lid),
                 "name": getattr(listing, "name", ""),
+                "runtime_type": getattr(listing, "runtime_type", "docker") or "docker",
                 "image": getattr(listing, "image", ""),
-                "timeout": (getattr(listing, "resource_limits", {}) or {}).get("timeout", 300),
+                "resource_limits": resource_limits,
+                "timeout": resource_limits.get("timeout", 300),
                 "entrypoint": getattr(listing, "entrypoint", None) or "bash",
                 "network_policy": getattr(listing, "network_policy", "none"),
+                "runtime_config": getattr(listing, "runtime_config", {}) or {},
             }
         )
 
