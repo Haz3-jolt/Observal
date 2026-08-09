@@ -424,16 +424,41 @@ jobs:
 
       - uses: chainguard-dev/actions/setup-gitsign@9d631658f55713e5f63ca0cc21ee168f81301fd9 # v1.6.30
 
+      # setup-gitsign configures Git but still installs gitsign 0.16.1.
+      - name: Install gitsign 0.17.1
+        env:
+          GITSIGN_VERSION: "0.17.1"
+          GITSIGN_SHA256: "69213a8a0813a151e5a47d0060862952ff833a845d57309dff76f7ba6600abae"
+        run: |
+          GITSIGN_BIN=$(mktemp)
+          trap 'rm -f "$GITSIGN_BIN"' EXIT
+          curl -fLsS \
+            "https://github.com/sigstore/gitsign/releases/download/v${GITSIGN_VERSION}/gitsign_${GITSIGN_VERSION}_linux_amd64" \
+            -o "$GITSIGN_BIN"
+          printf '%s  %s\n' "$GITSIGN_SHA256" "$GITSIGN_BIN" | sha256sum -c
+          install -m 0755 "$GITSIGN_BIN" "$HOME/.gitsign/gitsign"
+          gitsign version
+
       - name: Create or verify tag
         env:
           VERSION: ${{ needs.preflight.outputs.version }}
           TARGET: ${{ needs.preflight.outputs.target }}
+          GITSIGN_ENABLE_SIGSTORE_GO: "true"
+          GITSIGN_REKOR_MODE: "online"
+          GITSIGN_REKOR_VERSION: "1"
         run: |
           TAG="v$VERSION"
           verify_tag() {
-            gitsign verify-tag "$TAG" \
-              --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@refs/heads/main" \
-              --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+            for attempt in {1..5}; do
+              if gitsign verify-tag "$TAG" \
+                --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@refs/heads/main" \
+                --certificate-oidc-issuer "https://token.actions.githubusercontent.com"; then
+                return 0
+              fi
+              [ "$attempt" -eq 5 ] && return 1
+              echo "Tag verification attempt $attempt failed, retrying in 15 seconds"
+              sleep 15
+            done
           }
           if git rev-parse "$TAG^{commit}" >/dev/null 2>&1; then
             [ "$(git rev-parse "$TAG^{commit}")" = "$TARGET" ] || {

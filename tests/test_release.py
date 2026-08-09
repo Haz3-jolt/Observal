@@ -301,11 +301,25 @@ def test_release_notes_include_version_and_comparison_link():
 def test_release_workflow_signs_and_verifies_tags_before_push():
     workflow = (ROOT / ".github/workflows/release.yml").read_text()
     tag_job = workflow[workflow.index("  tag:\n") : workflow.index("  pypi:\n")]
+    install_gitsign = tag_job[
+        tag_job.index("      - name: Install gitsign 0.17.1") : tag_job.index("      - name: Create or verify tag")
+    ]
+    verify_tag = tag_job[tag_job.index("          verify_tag() {") : tag_job.index("          if git rev-parse")]
 
     assert "id-token: write" in tag_job
     assert "chainguard-dev/actions/setup-gitsign@9d631658f55713e5f63ca0cc21ee168f81301fd9" in tag_job
+    assert 'GITSIGN_VERSION: "0.17.1"' in install_gitsign
+    assert "69213a8a0813a151e5a47d0060862952ff833a845d57309dff76f7ba6600abae" in install_gitsign
+    assert "sha256sum -c" in install_gitsign
+    assert "gitsign version" in install_gitsign
+    assert 'GITSIGN_ENABLE_SIGSTORE_GO: "true"' in tag_job
+    assert 'GITSIGN_REKOR_MODE: "online"' in tag_job
+    assert 'GITSIGN_REKOR_VERSION: "1"' in tag_job
     assert "git tag -s" in tag_job
-    assert "gitsign verify-tag" in tag_job
+    assert "gitsign verify-tag" in verify_tag
+    assert "for attempt in {1..5}" in verify_tag
+    assert '"$attempt" -eq 5' in verify_tag
+    assert "sleep 15" in verify_tag
     assert tag_job.index("gitsign verify-tag") < tag_job.index("git push origin")
     assert "certificate-oidc-issuer" in tag_job
     assert "predates signed-tag enforcement" in tag_job
