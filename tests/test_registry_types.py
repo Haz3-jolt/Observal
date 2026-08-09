@@ -35,6 +35,9 @@ def _mock_db():
     db.commit = AsyncMock()
     db.refresh = AsyncMock()
     db.delete = AsyncMock()
+    empty = MagicMock()
+    empty.all.return_value = []
+    db.execute.return_value = empty
     # A review decision delivers inbox items in the same transaction, wrapping
     # each insert in a SAVEPOINT. A bare AsyncMock returns a coroutine from
     # begin_nested(), which is not an async context manager.

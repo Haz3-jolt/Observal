@@ -593,48 +593,47 @@ async def test_resolving_stamps_and_clears_resolved_at(sessions):
 
 
 @pytest.mark.asyncio
-async def test_reviewers_for_matches_can_review_exactly(sessions):
-    """``reviewers_for`` is the set inverse of ``teamspace.can_review``.
-
-    They are written in two different directions and must not drift, so this
-    asserts agreement over a matrix of callers rather than trusting the comment
-    that says they agree.
-    """
-    from services.teamspace import can_review, review_scope
-
+async def test_review_notifications_follow_item_and_team_visibility(sessions):
     async with sessions() as db:
         admin = await _user(db, UserRole.admin)
         global_reviewer = await _user(db, UserRole.reviewer)
-        plain = await _user(db, UserRole.user)
         team_owner = await _user(db)
+        team_reviewer = await _user(db)
         team_member = await _user(db)
+        other_owner = await _user(db)
 
         team = Team(id=uuid.uuid4(), name="Team", handle="team", created_by=team_owner.id)
-        db.add(team)
+        other = Team(id=uuid.uuid4(), name="Other", handle="other", created_by=other_owner.id)
+        db.add_all([team, other])
         await db.flush()
-        db.add(TeamMembership(team_id=team.id, user_id=team_owner.id, role=TeamRole.owner))
-        db.add(TeamMembership(team_id=team.id, user_id=team_member.id, role=TeamRole.member))
+        db.add_all(
+            [
+                TeamMembership(team_id=team.id, user_id=team_owner.id, role=TeamRole.owner),
+                TeamMembership(team_id=team.id, user_id=team_reviewer.id, role=TeamRole.reviewer),
+                TeamMembership(team_id=team.id, user_id=team_member.id, role=TeamRole.member),
+                TeamMembership(team_id=other.id, user_id=other_owner.id, role=TeamRole.owner),
+            ]
+        )
         await db.commit()
-
-        everyone = [admin, global_reviewer, plain, team_owner, team_member]
 
         class _Entity:
             def __init__(self, is_private, team_id):
                 self.is_private = is_private
                 self.team_id = team_id
 
-        for label, entity in [
-            ("public", _Entity(False, None)),
-            ("team-private", _Entity(True, team.id)),
-            ("personal-private", _Entity(True, None)),
-        ]:
-            expected = set()
-            for user in everyone:
-                scope = await review_scope(db, user)
-                if can_review(entity, scope):
-                    expected.add(user.id)
+        cases = [
+            ("public", _Entity(False, None), {admin.id, global_reviewer.id}),
+            (
+                "public-team",
+                _Entity(False, team.id),
+                {admin.id, global_reviewer.id, team_owner.id, team_reviewer.id},
+            ),
+            ("team-private", _Entity(True, team.id), {team_owner.id, team_reviewer.id}),
+            ("personal-private", _Entity(True, None), {admin.id}),
+        ]
+        for label, entity, expected in cases:
             actual = set(await recipients.reviewers_for(db, entity))
-            assert actual == expected, f"{label}: recipients drifted from can_review"
+            assert actual == expected, label
 
 
 @pytest.mark.asyncio

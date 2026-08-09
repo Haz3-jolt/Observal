@@ -16,10 +16,9 @@ Review is now capability scoped. The queue, the detail view, and the approve and
 reject actions all read one ReviewScope, so the list and the actions cannot drift
 apart: whatever a caller cannot see in the queue, they also cannot approve.
 
-The escalation this must not open is the mirror of the one team_role_self_publishes
-closes at publish time. Team roles are self-service, so a team owner who could approve
-a PUBLIC listing standing in their own team namespace would have a one-step route into
-the global catalog. Public items therefore stay with global reviewers, team roles or not.
+Team roles may review public content only after the teamspace itself passes global
+public-visibility review. That approval is the trust boundary allowing its owners and
+team reviewers to decide all later team content, including their own submissions.
 """
 
 from __future__ import annotations
@@ -156,7 +155,13 @@ async def _seed(sessions):
     global_reviewer = _user("globalreviewer", role=UserRole.reviewer)
     admin = _user("admin", role=UserRole.admin)
 
-    team = Team(id=uuid.uuid4(), name="Acme", handle="acme", created_by=owner.id)
+    team = Team(
+        id=uuid.uuid4(),
+        name="Acme",
+        handle="acme",
+        visibility_request_status="approved",
+        created_by=owner.id,
+    )
     other_team = Team(id=uuid.uuid4(), name="Other", handle="other", created_by=other_owner.id)
     memberships = [
         TeamMembership(team_id=team.id, user_id=owner.id, role=TeamRole.owner),
@@ -274,12 +279,11 @@ async def test_team_review_roles_see_their_teams_private_items(who):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("who", ["team_owner", "team_reviewer"])
-async def test_team_review_roles_do_not_see_their_teams_public_items(who):
-    """They cannot approve a public item, so listing it would only mislead them."""
+async def test_team_review_roles_see_their_teams_public_items(who):
     async with _sessions() as sessions:
         seed = await _seed(sessions)
         response = await _queue(sessions, getattr(seed, who))
-    assert "shared" not in _names(response)
+    assert "shared" in _names(response)
 
 
 @pytest.mark.asyncio
@@ -289,6 +293,39 @@ async def test_team_review_roles_see_their_teams_private_agents():
         seed = await _seed(sessions)
         response = await _queue(sessions, seed.team_owner)
     assert "Triage" in _names(response)
+
+
+@pytest.mark.asyncio
+async def test_private_team_role_cannot_review_public_content():
+    async with _sessions() as sessions:
+        seed = await _seed(sessions)
+        async with sessions() as session:
+            team = await session.get(Team, seed.team_id)
+            team.is_private = True
+            await session.commit()
+
+        queue = await _queue(sessions, seed.team_owner)
+        denied = await _approve(sessions, seed.team_owner, seed.public_id)
+
+    assert "internal" in _names(queue)
+    assert "shared" not in _names(queue)
+    assert denied.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_pending_public_team_has_no_team_review_capability():
+    async with _sessions() as sessions:
+        seed = await _seed(sessions)
+        async with sessions() as session:
+            team = await session.get(Team, seed.team_id)
+            team.is_private = True
+            team.visibility_request_status = "pending"
+            team.visibility_requested_at = datetime.now(UTC)
+            await session.commit()
+
+        response = await _queue(sessions, seed.team_owner)
+
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -422,7 +459,8 @@ async def test_team_private_item_is_not_approved_without_a_review_role(who):
 
 
 @pytest.mark.asyncio
-async def test_team_owner_approves_their_own_submission():
+@pytest.mark.parametrize("is_private", [True, False])
+async def test_team_owner_approves_their_own_submission(is_private):
     """Self-approval is deliberate policy, not an oversight.
 
     Team publishing never auto-approves anymore, so a team owner's (or team
@@ -433,7 +471,7 @@ async def test_team_owner_approves_their_own_submission():
     async with _sessions() as sessions:
         seed = await _seed(sessions)
         async with sessions() as session:
-            own = _mcp("owners-own", team_id=seed.team_id, is_private=True, submitted_by=seed.team_owner.id)
+            own = _mcp("owners-own", team_id=seed.team_id, is_private=is_private, submitted_by=seed.team_owner.id)
             session.add(own)
             await session.flush()
             version = _mcp_version(own, released_by=seed.team_owner.id)
@@ -507,28 +545,24 @@ async def test_public_item_is_approved_by_a_global_role(who):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("who", ["team_owner", "team_reviewer"])
-async def test_team_role_cannot_approve_a_public_item_in_its_own_namespace(who):
-    """The escalation this closes: team roles are self-service, so a team owner who
-    could approve a public listing standing in their own namespace would promote
-    anything into the global catalog by first promoting themselves."""
+async def test_team_role_can_approve_a_public_item_in_its_approved_namespace(who):
     async with _sessions() as sessions:
         seed = await _seed(sessions)
         response = await _approve(sessions, getattr(seed, who), seed.public_id)
-        assert response.status_code == 403
-        assert response.json()["detail"] == "Public items are reviewed by global reviewers, not by teamspace roles"
+        assert response.status_code == 200
 
         async with sessions() as session:
             listing = await session.get(McpListing, seed.public_id)
             version = await session.get(McpVersion, listing.latest_version_id)
-            assert version.status == ListingStatus.pending
+            assert version.status == ListingStatus.approved
 
 
 @pytest.mark.asyncio
-async def test_team_role_cannot_reject_a_public_item_in_its_own_namespace():
+async def test_team_role_can_reject_a_public_item_in_its_approved_namespace():
     async with _sessions() as sessions:
         seed = await _seed(sessions)
         response = await _reject(sessions, seed.team_owner, seed.public_id)
-        assert response.status_code == 403
+        assert response.status_code == 200
 
 
 # ── Agents ─────────────────────────────────────────────────────────────────
@@ -618,12 +652,11 @@ async def test_team_private_agent_detail_is_404_for_a_global_reviewer():
 
 
 @pytest.mark.asyncio
-async def test_public_detail_is_404_for_a_team_role_that_cannot_act_on_it():
-    """The detail view and the queue read one scope, so they cannot drift apart."""
+async def test_public_detail_is_visible_to_a_reviewing_team_role():
     async with _sessions() as sessions:
         seed = await _seed(sessions)
         response = await _detail(sessions, seed.team_owner, seed.public_id)
-    assert response.status_code == 404
+    assert response.status_code == 200
 
 
 # ── Deleting a teamspace must not strip access from its listings ─────────────

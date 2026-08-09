@@ -25,6 +25,18 @@ class Team(Base):
     __table_args__ = (
         UniqueConstraint("handle", name="uq_teams_handle"),
         CheckConstraint("NOT is_personal OR is_private", name="ck_teams_personal_private"),
+        CheckConstraint(
+            "visibility_request_status IS NULL OR visibility_request_status IN ('pending', 'approved', 'rejected')",
+            name="ck_teams_visibility_request_status",
+        ),
+        CheckConstraint(
+            "visibility_request_status != 'pending' OR is_private",
+            name="ck_teams_pending_visibility_private",
+        ),
+        CheckConstraint(
+            "visibility_request_status != 'pending' OR visibility_requested_at IS NOT NULL",
+            name="ck_teams_pending_visibility_requested_at",
+        ),
         Index("ix_teams_created_by", "created_by"),
         Index(
             "uq_teams_personal_created_by",
@@ -39,10 +51,25 @@ class Team(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     handle: Mapped[str] = mapped_column(String(32), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # A private teamspace is visible only to members and deployment admins.
+    # A private teamspace is visible to members and deployment admins.
+    # Global reviewers may also inspect it while public review is pending.
     # Same column shape as listings so `visibility` reads identically everywhere.
     is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     is_personal: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    visibility_request_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    visibility_requested_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", name="fk_teams_visibility_requested_by_users", ondelete="SET NULL"),
+        nullable=True,
+    )
+    visibility_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    visibility_reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", name="fk_teams_visibility_reviewed_by_users", ondelete="SET NULL"),
+        nullable=True,
+    )
+    visibility_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    visibility_rejection_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(

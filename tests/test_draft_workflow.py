@@ -25,7 +25,7 @@ from httpx import ASGITransport, AsyncClient
 from api.deps import get_current_user, get_db
 from api.routes.agent import router
 from models.agent import AgentStatus
-from models.team import TeamRole
+from models.team import Team, TeamRole
 from models.user import User, UserRole
 
 # ── Helpers ──────────────────────────────────────────────
@@ -54,6 +54,14 @@ def _membership(role: TeamRole):
     m = MagicMock()
     m.role = role
     return m
+
+
+def _team_row(agent, *, private=False, visibility_request_status=None):
+    team = MagicMock(spec=Team)
+    team.id = agent.team_id
+    team.is_private = private
+    team.visibility_request_status = visibility_request_status
+    return team
 
 
 def _db_with_membership(membership):
@@ -358,6 +366,7 @@ class TestDraftVisibilityChange:
         component = _component_mock()
         agent = self._team_agent(user, is_private=True, components=[component])
         db = _sequenced_db(
+            _scalar_result(_team_row(agent)),  # lock owning team
             _scalar_result(_membership(TeamRole.owner)),  # team role gate
             _scalar_result(None),  # component is outside the public scope
             _rows_result([(component.component_id, "secret-mcp")]),  # name lookup
@@ -383,6 +392,7 @@ class TestDraftVisibilityChange:
         component = _component_mock()
         agent = self._team_agent(user, is_private=True, components=[component])
         db = _sequenced_db(
+            _scalar_result(_team_row(agent)),
             _scalar_result(_membership(TeamRole.owner)),
             _scalar_result(_approved_listing()),
         )
@@ -396,6 +406,23 @@ class TestDraftVisibilityChange:
         assert agent.is_private is False
         assert r.json()["visibility"] == "public"
         db.commit.assert_awaited()
+
+    @pytest.mark.asyncio
+    @patch("api.routes.agent.draft._load_agent")
+    async def test_private_team_cannot_make_draft_public(self, mock_load):
+        user = _user()
+        agent = self._team_agent(user, is_private=True, components=[])
+        db = _sequenced_db(_scalar_result(_team_row(agent, private=True)))
+        app, db, _ = _app_with(user=user, db=db)
+        mock_load.return_value = agent
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            response = await ac.put(f"/api/v1/agents/{agent.id}/draft", json={"visibility": "public"})
+
+        assert response.status_code == 409
+        assert "Private teamspaces" in response.json()["detail"]
+        assert agent.is_private is True
+        db.commit.assert_not_awaited()
 
     @pytest.mark.asyncio
     @patch("api.routes.agent.draft._load_agent")
@@ -423,6 +450,7 @@ class TestDraftVisibilityChange:
         component = _component_mock()
         agent = self._team_agent(user, is_private=False, components=[component])
         db = _sequenced_db(
+            _scalar_result(_team_row(agent)),
             _scalar_result(_membership(TeamRole.owner)),
             _scalar_result(_approved_listing()),
         )
@@ -442,7 +470,10 @@ class TestDraftVisibilityChange:
         """A plain team member is refused before any component work happens."""
         user = _user()
         agent = self._team_agent(user, is_private=True, components=[_component_mock()])
-        db = _sequenced_db(_scalar_result(_membership(TeamRole.member)))
+        db = _sequenced_db(
+            _scalar_result(_team_row(agent)),
+            _scalar_result(_membership(TeamRole.member)),
+        )
         app, db, _ = _app_with(user=user, db=db)
         mock_load.return_value = agent
 
@@ -479,6 +510,7 @@ class TestDraftVisibilityChange:
         agent = self._team_agent(user, is_private=True, components=[_component_mock()])
         new_component_id = uuid.uuid4()
         db = _sequenced_db(
+            _scalar_result(_team_row(agent)),
             _scalar_result(_membership(TeamRole.owner)),
             _scalar_result(None),  # the resent component is not public
         )

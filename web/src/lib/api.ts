@@ -77,6 +77,7 @@ import type {
 	TeamInvitePreview,
 	TeamJoinRequest,
 	TeamJoinRequestStatus,
+	TeamVisibilityRequest,
 	TeamMember,
 	TeamMemberUpsertBody,
 	TeamRole,
@@ -598,6 +599,10 @@ export const teams = {
 		put<Team>(`/teams/${id}`, body),
 	updateVisibility: (id: string, visibility: "public" | "private") =>
 		patch<Team>(`/teams/${id}/visibility`, { visibility }),
+	visibilityRequests: () => get<TeamVisibilityRequest[]>("/teams/visibility-requests"),
+	approveVisibility: (id: string) => post<Team>(`/teams/${id}/visibility-request/approve`),
+	rejectVisibility: (id: string, reason?: string) =>
+		post<Team>(`/teams/${id}/visibility-request/reject`, reason ? { reason } : {}),
 	delete: (id: string) => del(`/teams/${id}`),
 	members: (id: string) => get<TeamMember[]>(`/teams/${id}/members`),
 	upsertMember: (

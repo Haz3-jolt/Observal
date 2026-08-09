@@ -34,8 +34,7 @@ class InboxKind(str, enum.Enum):
 
     Kinds whose source does not exist in the codebase yet are declared here
     anyway so the enum and its migration stay stable when those initiatives
-    land. ``team_join_requested``, ``team_join_decided`` and
-    ``team_created_pending`` wait on the teamspace request flow;
+    land. ``ownership_transfer`` waits on its offer flow, and
     ``change_requested`` waits on review conversations.
     """
 

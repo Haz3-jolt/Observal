@@ -4,7 +4,7 @@
 /**
  * The inbox, laid out as a notifications feed.
  *
- * The shape is deliberately GitHub's: a filter rail on the left, an
+ * The shape is deliberately GitHub's: a filter rail beside the feed, an
  * All/Unread split with search and sort above the list, and rows that carry
  * their subject, their reason and their age on one line. That layout is worth
  * copying because it solves the same problem — a long list of heterogeneous
@@ -365,7 +365,7 @@ function InboxRail({
 		b === "open" ? counts?.open : b === "done" ? counts?.done : counts?.dismissed;
 
 	return (
-		<aside className="hidden w-56 shrink-0 overflow-y-auto border-r p-2 md:block">
+		<aside data-testid="inbox-rail" className="hidden w-56 shrink-0 overflow-y-auto border-l p-2 md:block">
 			<nav className="space-y-0.5">
 				{BUCKETS.map((entry) => (
 					<RailRow
@@ -841,33 +841,7 @@ export default function InboxPage() {
 			    shell's own overflow-y-auto in place produces two nested scrollbars. */}
 			<DashboardContent className="min-h-0 overflow-hidden p-0">
 				<div className="flex h-full min-h-0">
-					<InboxRail
-						bucket={bucket}
-						kind={kind}
-						subjectType={subjectType}
-						actionOnly={actionOnly}
-						counts={counts}
-						onBucket={(b) => {
-							setBucket(b);
-							resetPage();
-						}}
-						onKind={(k) => {
-							setKind(k);
-							resetPage();
-						}}
-						onSubjectType={(t) => {
-							setSubjectType(t);
-							resetPage();
-						}}
-						onActionOnly={(v) => {
-							setActionOnly(v);
-							resetPage();
-						}}
-						onMarkAllRead={() => readAll.mutate(listFilters)}
-						markAllDisabled={readAll.isPending || items.length === 0}
-					/>
-
-					<div className="flex min-h-0 min-w-0 flex-1 flex-col">
+					<div data-testid="inbox-feed" className="flex min-h-0 min-w-0 flex-1 flex-col">
 						{/* Toolbar */}
 						<div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
 							<div className="flex overflow-hidden rounded-md border">
@@ -1123,6 +1097,32 @@ export default function InboxPage() {
 							</div>
 						</div>
 					</div>
+
+					<InboxRail
+						bucket={bucket}
+						kind={kind}
+						subjectType={subjectType}
+						actionOnly={actionOnly}
+						counts={counts}
+						onBucket={(b) => {
+							setBucket(b);
+							resetPage();
+						}}
+						onKind={(k) => {
+							setKind(k);
+							resetPage();
+						}}
+						onSubjectType={(t) => {
+							setSubjectType(t);
+							resetPage();
+						}}
+						onActionOnly={(v) => {
+							setActionOnly(v);
+							resetPage();
+						}}
+						onMarkAllRead={() => readAll.mutate(listFilters)}
+						markAllDisabled={readAll.isPending || items.length === 0}
+					/>
 				</div>
 			</DashboardContent>
 

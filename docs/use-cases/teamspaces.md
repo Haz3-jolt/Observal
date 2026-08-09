@@ -3,28 +3,34 @@
 
 # Teamspaces
 
-A teamspace is a shared namespace that a group of users publishes under. Each teamspace has a unique handle (for example `platform-tools`) that is reserved across the whole registry, so a user cannot take a username that collides with a team handle and vice versa.
+A teamspace is a shared registry namespace with a unique handle such as `platform-tools`. Team handles and usernames cannot collide.
 
 ## Roles
 
-Every member of a teamspace has one of three roles:
+Every member has one role:
 
 | Role | Can |
 | --- | --- |
-| `owner` | Manage members, edit the teamspace, delete the teamspace |
-| `reviewer` | (Reserved for team publishing approval, see below) |
-| `member` | View the team roster |
+| `owner` | Manage members, invites, visibility, and registry content |
+| `reviewer` | Approve or reject the teamspace's pending agents and components |
+| `member` | View the roster and publish into the teamspace |
 
-Global admins can manage any teamspace regardless of membership. A teamspace always keeps at least one owner; the last owner cannot leave or be removed without first transferring ownership.
+Global admins can manage any teamspace. A teamspace always keeps at least one owner.
 
 ## Creating a teamspace
 
-Any user with the `reviewer` role or above can create a teamspace from the web UI under **Registry, Teamspaces**. The creator becomes the first owner. The handle is derived from the name you choose but can be edited, and it must pass the namespace rules: 3 to 32 lowercase letters, digits, and hyphens, starting and ending with a letter or digit.
+Any signed-in user can create a teamspace under **Registry, Teamspaces**. Private teamspaces are ready immediately. A public teamspace reserves its handle but stays private and locked until a global reviewer or above approves it in the Review queue. A global reviewer may approve their own request.
 
-## Managing members
+Changing an existing private teamspace to public follows the same review flow. A rejected request keeps the teamspace private and can be submitted again. Personal teamspaces always remain private.
 
-Team owners and global admins can add members by searching for a user by name, email, or username, and assigning a role. Members can leave a team on their own unless they are the last owner.
+## Publishing and review
 
-## What is not here yet
+Private teamspaces can publish only team-private agents and components. Teamspace submissions never auto-approve.
 
-Team-scoped publishing (publishing an agent or component directly into a team namespace, and team-private visibility for components and agents) is a follow-up slice. Today teamspaces establish identity, membership, and handle reservation only.
+After a teamspace is approved for public visibility, its owners and team reviewers may approve or reject all content in that namespace, including public content and their own submissions. Global reviewers continue to review public content across the registry. Public submissions notify both groups, while team-private submissions notify only that teamspace's owners and reviewers. Global admins may still review all content.
+
+A public teamspace cannot become private while it owns public agents, components, or component sources. Restrict or remove those items first.
+
+## Membership
+
+Owners and global admins can add users and assign roles. Public teamspaces accept join requests. Private teamspaces use expiring invite links, and their owners decide the resulting requests. Members can leave unless they are the last owner.

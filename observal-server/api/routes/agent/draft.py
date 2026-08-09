@@ -14,7 +14,7 @@ from api.deps import commit_or_name_conflict, get_db, get_effective_agent_permis
 from models.agent import Agent, AgentStatus, AgentVersion
 from models.agent_component import AgentComponent
 from models.skill import SkillListing
-from models.team import TeamRole
+from models.team import Team, TeamRole
 from models.user import User, UserRole
 from schemas.agent import AgentCreateRequest, AgentResponse, AgentUpdateRequest
 from services.config_generator import validate_mcp_command
@@ -23,7 +23,7 @@ from services.harness_capability_inference import compute_supported_harnesses, i
 from services.inbox import sources as inbox
 from services.registry_telemetry import emit_registry_event
 from services.teamspace import (
-    is_global_reviewer,
+    is_admin,
     publish_auto_approves_for_entity,
     resolve_publish_target,
     review_publication_to_public,
@@ -38,16 +38,24 @@ from .helpers import _agent_to_response, _load_agent, _resolve_component_names
 # ---------------------------------------------------------------------------
 
 
-async def _authorize_visibility_change(agent: Agent, current_user: User, db: AsyncSession) -> None:
-    """Gate a visibility flip behind the roles the registry visibility route requires.
-
-    Personal agents are already covered by the owner or editor check on the
-    route. Team agents additionally require a team owner or team reviewer,
-    matching PATCH /api/v1/registry/agent/{id}/visibility.
-    """
-    if is_global_reviewer(current_user):
-        return
+async def _authorize_visibility_change(
+    agent: Agent,
+    current_user: User,
+    db: AsyncSession,
+    *,
+    target_is_private: bool,
+) -> None:
+    """Authorize and serialize a team agent visibility change."""
     if agent.team_id is None:
+        return
+    team = (await db.execute(select(Team).where(Team.id == agent.team_id).with_for_update())).scalar_one_or_none()
+    if team is None:
+        raise HTTPException(status_code=404, detail="Teamspace not found")
+    if team.visibility_request_status == "pending":
+        raise HTTPException(status_code=409, detail="Teamspace is locked pending public visibility review")
+    if not target_is_private and team.is_private:
+        raise HTTPException(status_code=409, detail="Private teamspaces can only contain team-private items")
+    if is_admin(current_user):
         return
     membership = await team_membership(db, agent.team_id, current_user.id)
     if not membership or membership.role not in (TeamRole.owner, TeamRole.reviewer):
@@ -266,7 +274,7 @@ async def update_draft(
     visibility_changed = target_is_private != bool(agent.is_private)
     target_team_id = agent.team_id if target_is_private else None
     if visibility_changed:
-        await _authorize_visibility_change(agent, current_user, db)
+        await _authorize_visibility_change(agent, current_user, db, target_is_private=target_is_private)
         # A caller who resends components gets them validated below; otherwise
         # the currently attached set has to survive the new target.
         if req.components is None:

@@ -205,6 +205,79 @@ def _team_subject(team) -> Subject:
     )
 
 
+async def on_team_visibility_requested(
+    db: AsyncSession,
+    team,
+    *,
+    requester_id: uuid.UUID,
+) -> int:
+    """Tell global reviewers that a teamspace is waiting for public approval."""
+    subject = _team_subject(team)
+    users = await recipients.global_reviewers(db)
+    items = await deliver(
+        db,
+        kind=InboxKind.team_created_pending,
+        recipients=users,
+        subject=subject,
+        actor_id=requester_id,
+        skip_actor=False,
+    )
+    optic.debug("inbox: team visibility requested for {} -> {} item(s)", team.id, len(items))
+    return len(items)
+
+
+async def on_team_visibility_cancelled(
+    db: AsyncSession,
+    team,
+    *,
+    actor_id: uuid.UUID | None,
+) -> int:
+    """Close reviewer work when an owner withdraws a visibility request."""
+    subject = _team_subject(team)
+    request_key = spec_for(InboxKind.team_created_pending).dedupe(subject, {})[:255]
+    return await resolve_matching(
+        db,
+        kind=InboxKind.team_created_pending,
+        dedupe_key=request_key,
+        detail="Public visibility request withdrawn",
+        actor_id=actor_id,
+    )
+
+
+async def on_team_visibility_decided(
+    db: AsyncSession,
+    team,
+    *,
+    requester_id: uuid.UUID | None,
+    approved: bool,
+    actor_id: uuid.UUID | None,
+    reason: str | None = None,
+) -> int:
+    """Notify the requester and current owners, then close reviewer work."""
+    subject = _team_subject(team)
+    owners = await recipients.team_owners(db, team.id)
+    users = owners + ([requester_id] if requester_id is not None else [])
+    items = await deliver(
+        db,
+        kind=InboxKind.review_approved if approved else InboxKind.review_rejected,
+        recipients=users,
+        subject=subject,
+        actor_id=actor_id,
+        body=reason,
+        context={"reason": reason} if reason else None,
+        skip_actor=False,
+    )
+    request_key = spec_for(InboxKind.team_created_pending).dedupe(subject, {})[:255]
+    await resolve_matching(
+        db,
+        kind=InboxKind.team_created_pending,
+        dedupe_key=request_key,
+        detail=f"Public visibility {'approved' if approved else 'rejected'}",
+        actor_id=actor_id,
+    )
+    return len(items)
+
+
 async def on_team_join_requested(
     db: AsyncSession,
     team,

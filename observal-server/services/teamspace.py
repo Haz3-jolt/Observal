@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from models.team import Team, TeamMembership, TeamRole
 from models.user import User, UserRole
@@ -68,16 +68,17 @@ REVIEWING_TEAM_ROLES = (TeamRole.owner, TeamRole.reviewer)
 class ReviewScope:
     """What one caller is allowed to review.
 
-    ``is_admin`` reviews everything, team-private items included, because an admin
-    already administers the whole deployment. ``is_global_reviewer`` without
-    ``is_admin`` is the plain global reviewer role: public items only. ``team_ids``
-    are the teamspaces where the caller is an owner or a reviewer, and they carry
-    the right to review that teamspace's own private items and nothing else.
+    ``is_admin`` reviews everything. ``is_global_reviewer`` without ``is_admin``
+    is the plain global reviewer role. ``team_ids`` contains unlocked teamspaces
+    where the caller owns or reviews private content. ``public_team_ids`` is the
+    subset already approved for public visibility, whose public content those
+    same team roles may also review.
     """
 
     is_admin: bool
     is_global_reviewer: bool
     team_ids: frozenset[uuid.UUID]
+    public_team_ids: frozenset[uuid.UUID] = frozenset()
 
     @property
     def is_empty(self) -> bool:
@@ -96,16 +97,22 @@ async def review_scope(db: AsyncSession, user: User) -> ReviewScope:
         # memberships would not widen anything and the query is skipped.
         return ReviewScope(is_admin=True, is_global_reviewer=True, team_ids=frozenset())
 
-    rows = await db.execute(
-        select(TeamMembership.team_id).where(
-            TeamMembership.user_id == user.id,
-            TeamMembership.role.in_(REVIEWING_TEAM_ROLES),
+    rows = (
+        await db.execute(
+            select(TeamMembership.team_id, Team.is_private)
+            .join(Team, Team.id == TeamMembership.team_id)
+            .where(
+                TeamMembership.user_id == user.id,
+                TeamMembership.role.in_(REVIEWING_TEAM_ROLES),
+                or_(Team.visibility_request_status.is_(None), Team.visibility_request_status != "pending"),
+            )
         )
-    )
+    ).all()
     return ReviewScope(
         is_admin=False,
         is_global_reviewer=is_global_reviewer(user),
-        team_ids=frozenset(row[0] for row in rows),
+        team_ids=frozenset(team_id for team_id, _is_private in rows),
+        public_team_ids=frozenset(team_id for team_id, private in rows if not private),
     )
 
 
@@ -114,22 +121,20 @@ def can_review(entity, scope: ReviewScope) -> bool:
 
     Decided from the item's own visibility, never from what the caller asked for.
     A team-private item belongs to its teamspace: only that teamspace's owners and
-    reviewers, plus admins, may act on it, which is what keeps private titles away
-    from a global reviewer who is not in the team. A public item is the global
-    catalog: only a global reviewer and above may act on it, so a team owner cannot
-    walk a listing out of their own namespace into everyone's registry. Reviewing
-    their OWN submission is allowed — team publishes never auto-approve, so
-    self-approval is the recorded decision that replaces the old silent skip.
+    reviewers, plus admins, may act on it. Public items may also be handled by
+    owners and reviewers when their teamspace has passed public visibility review.
+    Reviewing their own submission is allowed: team publishes never auto-approve,
+    so self-approval is the recorded decision replacing the old silent skip.
 
     A private item with no teamspace is a personal listing. Nobody holds a team
     role over it, so it stays admin-only.
     """
     if scope.is_admin:
         return True
+    team_id = getattr(entity, "team_id", None)
     if getattr(entity, "is_private", False):
-        team_id = getattr(entity, "team_id", None)
         return team_id is not None and team_id in scope.team_ids
-    return scope.is_global_reviewer
+    return scope.is_global_reviewer or (team_id is not None and team_id in scope.public_team_ids)
 
 
 async def user_team_ids(db: AsyncSession, user_id: uuid.UUID) -> list[uuid.UUID]:
@@ -141,13 +146,15 @@ def team_visible_to(team: Team, membership: TeamMembership | None, user: User) -
     """Whether this caller may see this teamspace at all.
 
     Public teamspaces are visible to every signed-in user. A private one is
-    visible only to its members and deployment admins. Global reviewers keep
-    their public review scope but receive no private-team metadata. Callers
-    that fail this get 404, never 403, so a private handle's existence is not
-    confirmed.
+    visible only to its members and deployment admins. Global reviewers may
+    also inspect a pending public-visibility request. Other private teamspaces
+    remain hidden, and callers that fail this check receive 404 so a private
+    handle's existence is not confirmed.
     """
     if not team.is_private:
         return True
+    if getattr(team, "visibility_request_status", None) == "pending":
+        return membership is not None or is_global_reviewer(user)
     return membership is not None or is_admin(user)
 
 
@@ -189,6 +196,8 @@ async def resolve_publish_target(
     team = await db.get(Team, team_id, with_for_update=True)
     if not team:
         raise HTTPException(status_code=404, detail="Teamspace not found")
+    if getattr(team, "visibility_request_status", None) == "pending":
+        raise HTTPException(status_code=409, detail="Teamspace is locked pending public visibility review")
     if team.is_private and target_visibility == "public":
         raise HTTPException(status_code=409, detail="Private teamspaces can only publish team-private items")
     membership = await team_membership(db, team.id, user.id)

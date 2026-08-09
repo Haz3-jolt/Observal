@@ -16,8 +16,9 @@ function TeamInvitePage() {
 	const requestJoin = useRequestJoin(teamId);
 	const cancelRequest = useCancelJoinRequest(teamId);
 	const request = preview.data?.request;
+	const isMember = preview.data?.is_member === true;
 
-	function requestAccess() {
+	function requestToJoin() {
 		requestJoin.mutate({ invite_token: token }, { onSuccess: () => preview.refetch() });
 	}
 
@@ -45,7 +46,7 @@ function TeamInvitePage() {
 					</div>
 				) : (
 					<div className="w-full max-w-lg rounded-lg border bg-card p-8 text-center shadow-sm">
-						{request?.status === "approved" ? (
+						{isMember ? (
 							<CheckCircle2 className="mx-auto h-10 w-10 text-success" />
 						) : request?.status === "pending" ? (
 							<Clock className="mx-auto h-10 w-10 text-primary-accent" />
@@ -59,32 +60,39 @@ function TeamInvitePage() {
 						{preview.data?.team_description && <p className="mt-4 text-sm text-muted-foreground">{preview.data.team_description}</p>}
 						{preview.data?.invited_by && <p className="mt-3 text-xs text-muted-foreground">Invited by {preview.data.invited_by}</p>}
 
-						{request?.status === "pending" ? (
+						{isMember ? (
 							<div className="mt-6 space-y-3">
-								<p className="text-sm text-primary-accent">Access requested. A teamspace owner must approve you.</p>
+								<p className="text-sm text-success">
+									{request?.status === "approved" ? "Join request approved. You are now a member." : "You are already a member."}
+								</p>
+								<Button asChild><Link to="/teamspaces/$handle" params={{ handle: preview.data?.team_handle ?? "" }}>Open teamspace</Link></Button>
+							</div>
+						) : request?.status === "pending" ? (
+							<div className="mt-6 space-y-3">
+								<p className="text-sm text-primary-accent">Join requested. A teamspace owner must approve you.</p>
 								<Button variant="outline" disabled={cancelRequest.isPending} onClick={withdrawRequest}>
 									{cancelRequest.isPending && <Loader2 className="animate-spin" />} Withdraw request
 								</Button>
 							</div>
 						) : request?.status === "approved" ? (
 							<div className="mt-6 space-y-3">
-								<p className="text-sm text-success">Access approved. You are now a member.</p>
-								<Button asChild><Link to="/teamspaces/$handle" params={{ handle: preview.data?.team_handle ?? "" }}>Open teamspace</Link></Button>
+								<p className="text-sm text-muted-foreground">You left this teamspace.</p>
+								{preview.data?.valid && <Button disabled={requestJoin.isPending} onClick={requestToJoin}>Request to join again</Button>}
 							</div>
 						) : request?.status === "rejected" ? (
 							<div className="mt-6 space-y-3">
-								<p className="text-sm text-destructive">Access request rejected.</p>
+								<p className="text-sm text-destructive">Join request rejected.</p>
 								{request.decision_reason && <p className="text-xs text-muted-foreground">{request.decision_reason}</p>}
-								{preview.data?.valid && <Button disabled={requestJoin.isPending} onClick={requestAccess}>Request access again</Button>}
+								{preview.data?.valid && <Button disabled={requestJoin.isPending} onClick={requestToJoin}>Request to join again</Button>}
 							</div>
 						) : request?.status === "cancelled" ? (
 							<div className="mt-6 space-y-3">
-								<p className="text-sm text-muted-foreground">You withdrew this access request.</p>
-								{preview.data?.valid && <Button disabled={requestJoin.isPending} onClick={requestAccess}>Request access again</Button>}
+								<p className="text-sm text-muted-foreground">You withdrew this join request.</p>
+								{preview.data?.valid && <Button disabled={requestJoin.isPending} onClick={requestToJoin}>Request to join again</Button>}
 							</div>
 						) : (
-							<Button className="mt-6" disabled={requestJoin.isPending} onClick={requestAccess}>
-								{requestJoin.isPending && <Loader2 className="animate-spin" />} Request access
+							<Button className="mt-6" disabled={requestJoin.isPending} onClick={requestToJoin}>
+								{requestJoin.isPending && <Loader2 className="animate-spin" />} Request to join
 							</Button>
 						)}
 					</div>

@@ -14,9 +14,21 @@ export interface Team {
 	description?: string | null;
 	visibility?: TeamVisibility;
 	is_personal?: boolean;
+	visibility_request_status?: "pending" | "approved" | "rejected" | null;
+	visibility_rejection_reason?: string | null;
 	role?: TeamRole | null;
 	member_count?: number | null;
 	created_at?: string;
+}
+
+export interface TeamVisibilityRequest {
+	team_id: string;
+	name: string;
+	handle: string;
+	description?: string | null;
+	requested_by: string | null;
+	requested_by_username?: string | null;
+	requested_at: string;
 }
 
 export interface TeamMember {
@@ -63,6 +75,7 @@ export interface TeamInviteCreated extends TeamInvite {
 export interface TeamInvitePreview {
 	valid: boolean;
 	invite_state?: TeamInviteState | null;
+	is_member: boolean;
 	team_id?: string | null;
 	team_name?: string | null;
 	team_handle?: string | null;

@@ -105,8 +105,8 @@ def _authorize_item(entity, scope: ReviewScope) -> None:
 
     A team-private item the caller cannot review answers 404, matching the read
     paths: the queue already hides it, so a 403 naming it as team-private would
-    confirm both that the id exists and that it is private. A PUBLIC item is
-    already discoverable, so refusing it can say why without disclosing anything.
+    confirm both that the id exists and that it is private. A public item is
+    already discoverable, so refusing it can name the review-scope boundary.
     """
     if can_review(entity, scope):
         return
@@ -114,7 +114,7 @@ def _authorize_item(entity, scope: ReviewScope) -> None:
         raise HTTPException(status_code=404, detail="Submission not found")
     raise HTTPException(
         status_code=403,
-        detail="Public items are reviewed by global reviewers, not by teamspace roles",
+        detail="Public item is outside your review scope",
     )
 
 

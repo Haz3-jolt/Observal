@@ -7,15 +7,32 @@
 
 
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { CheckCircle2, LayoutGrid, TableProperties, Eye } from "lucide-react";
+import { Building2, CheckCircle2, LayoutGrid, TableProperties, Eye } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
-import { useReviewAgents, useReviewComponents, useReviewAction, useReviewSubscription } from "@/hooks/use-api";
+import {
+  useDecideTeamVisibility,
+  useReviewAgents,
+  useReviewComponents,
+  useReviewAction,
+  useReviewSubscription,
+  useTeamVisibilityRequests,
+} from "@/hooks/use-api";
 import { useAuthGuard } from "@/hooks/use-auth";
-import type { ReviewItem } from "@/lib/types";
+import type { ReviewItem, TeamVisibilityRequest } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/layouts/page-header";
 import { CardSkeleton, TableSkeleton } from "@/components/shared/skeleton-layouts";
 import { ErrorState } from "@/components/shared/error-state";
@@ -243,11 +260,13 @@ function ReviewItemList({
 }
 
 export default function ReviewPage() {
-  const { role } = useAuthGuard();
+  useAuthGuard();
   useReviewSubscription();
   const { data: agents, isLoading: agentsLoading, isError: agentsError, error: agentsErr, refetch: refetchAgents } = useReviewAgents();
   const { data: components, isLoading: componentsLoading, isError: componentsError, error: componentsErr, refetch: refetchComponents } = useReviewComponents();
+  const { data: teamspaces, isLoading: teamspacesLoading, isError: teamspacesError, error: teamspacesErr, refetch: refetchTeamspaces } = useTeamVisibilityRequests();
   const reviewAction = useReviewAction();
+  const teamspaceAction = useDecideTeamVisibility();
   const [view, setView] = useState<ViewMode>("grid");
   // ?tab= lets an inbox item open the tab that actually holds the submission it
   // names. Absent, the queue opens on agents as before.
@@ -262,10 +281,13 @@ export default function ReviewPage() {
   const [selectedItem, setSelectedItem] = useState<ReviewItem | null>(null);
   const [diffItem, setDiffItem] = useState<ReviewItem | null>(null);
   const [nestedDiffItem, setNestedDiffItem] = useState<ReviewItem | null>(null);
+  const [rejectTeamspace, setRejectTeamspace] = useState<TeamVisibilityRequest | null>(null);
+  const [teamspaceReason, setTeamspaceReason] = useState("");
 
   const agentCount = (agents ?? []).length;
   const componentCount = (components ?? []).length;
-  const totalPending = agentCount + componentCount;
+  const teamspaceCount = (teamspaces ?? []).length;
+  const totalPending = agentCount + componentCount + teamspaceCount;
 
   const handleApprove = useCallback(
     (id: string, type?: string, category?: string) => reviewAction.mutate({ id, type, action: "approve", category }),
@@ -329,7 +351,7 @@ export default function ReviewPage() {
         ]}
         actionButtonsRight={
           <div className="flex items-center gap-2">
-            {!agentsLoading && !componentsLoading && totalPending > 0 && (
+            {!agentsLoading && !componentsLoading && !teamspacesLoading && totalPending > 0 && (
               <Badge variant="secondary" className="text-xs">
                 {totalPending} pending
               </Badge>
@@ -365,6 +387,9 @@ export default function ReviewPage() {
             </TabsTrigger>
             <TabsTrigger value="components">
               Components{!componentsLoading ? ` (${componentCount})` : ""}
+            </TabsTrigger>
+            <TabsTrigger value="teamspaces">
+              Teamspaces{!teamspacesLoading ? ` (${teamspaceCount})` : ""}
             </TabsTrigger>
           </TabsList>
 
@@ -415,8 +440,115 @@ export default function ReviewPage() {
               />
             )}
           </TabsContent>
+
+          <TabsContent value="teamspaces">
+            {teamspacesLoading ? (
+              <CardSkeleton count={3} columns={3} />
+            ) : teamspacesError ? (
+              <ErrorState message={teamspacesErr?.message} onRetry={() => refetchTeamspaces()} />
+            ) : teamspaceCount === 0 ? (
+              <EmptyState
+                icon={CheckCircle2}
+                title="No teamspaces to review"
+                description="Public visibility requests will appear here."
+              />
+            ) : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {(teamspaces ?? []).map((team: TeamVisibilityRequest) => (
+                  <div
+                    key={team.team_id}
+                    data-testid={`teamspace-review-${team.team_id}`}
+                    className="space-y-3 rounded-md border border-border bg-card p-4"
+                  >
+                    <div className="flex items-start gap-3">
+                      <Building2 className="mt-0.5 h-4 w-4 text-primary-accent" />
+                      <div className="min-w-0">
+                        <h3 className="truncate text-sm font-semibold">{team.name}</h3>
+                        <p className="font-mono text-xs text-muted-foreground">{team.handle}</p>
+                      </div>
+                    </div>
+                    {team.description && <p className="line-clamp-2 text-xs text-muted-foreground">{team.description}</p>}
+                    <p className="text-xs text-muted-foreground">
+                      Requested by {team.requested_by_username ? `@${team.requested_by_username}` : "a user"}
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="flex-1"
+                        disabled={teamspaceAction.isPending}
+                        onClick={() => teamspaceAction.mutate({ id: team.team_id, approve: true })}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        disabled={teamspaceAction.isPending}
+                        onClick={() => setRejectTeamspace(team)}
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
         </Tabs>
       </div>
+
+      <Dialog
+        open={!!rejectTeamspace}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRejectTeamspace(null);
+            setTeamspaceReason("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject public visibility</DialogTitle>
+            <DialogDescription>
+              The teamspace stays private, and its owner can submit another request after making changes.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="teamspace-rejection-reason">Reason (optional)</Label>
+            <Textarea
+              id="teamspace-rejection-reason"
+              value={teamspaceReason}
+              maxLength={500}
+              onChange={(event) => setTeamspaceReason(event.target.value)}
+              placeholder="Explain what needs to change before this teamspace can become public."
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectTeamspace(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={teamspaceAction.isPending}
+              onClick={() => {
+                if (!rejectTeamspace) return;
+                teamspaceAction.mutate(
+                  { id: rejectTeamspace.team_id, approve: false, reason: teamspaceReason.trim() || undefined },
+                  {
+                    onSuccess: () => {
+                      setRejectTeamspace(null);
+                      setTeamspaceReason("");
+                    },
+                  },
+                );
+              }}
+            >
+              Reject request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ReviewDetailSheet
         item={selectedItem}

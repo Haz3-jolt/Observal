@@ -281,9 +281,9 @@ async def test_list_sources_hides_private_sources_with_no_teamspace():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("role", [UserRole.reviewer, UserRole.admin, UserRole.super_admin])
-async def test_list_sources_returns_every_team_private_source_to_global_reviewers(role):
-    """Global reviewers and admins moderate the whole registry, so they see all of it."""
+@pytest.mark.parametrize("role", [UserRole.admin, UserRole.super_admin])
+async def test_list_sources_returns_every_team_private_source_to_admins(role):
+    """Deployment admins retain operational access to private team sources."""
     team = _team("platform")
 
     async with _api(_user(role=role)) as (client, sessions):
@@ -299,6 +299,20 @@ async def test_list_sources_returns_every_team_private_source_to_global_reviewer
             "https://github.com/example/private",
             "https://github.com/example/public",
         }
+
+
+@pytest.mark.asyncio
+async def test_list_sources_hides_other_teams_private_sources_from_global_reviewer():
+    team = _team("platform")
+    async with _api(_user(role=UserRole.reviewer)) as (client, sessions):
+        await _seed(
+            sessions,
+            team,
+            _source("https://github.com/example/private", is_public=False, team_id=team.id),
+            _source("https://github.com/example/public", is_public=True),
+        )
+        response = await client.get("/api/v1/component-sources")
+    assert [source["url"] for source in response.json()] == ["https://github.com/example/public"]
 
 
 # ── get_source: non-members get 404 so existence is not leaked ───────────────
@@ -345,9 +359,9 @@ async def test_get_team_private_source_as_member_returns_200():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("role", [UserRole.reviewer, UserRole.admin, UserRole.super_admin])
-async def test_get_team_private_source_as_global_reviewer_returns_200(role):
-    """Global reviewers and admins can read team-private sources."""
+@pytest.mark.parametrize("role", [UserRole.admin, UserRole.super_admin])
+async def test_get_team_private_source_as_admin_returns_200(role):
+    """Deployment admins can read team-private sources."""
     team = _team("platform")
     private = _source("https://github.com/example/private", is_public=False, team_id=team.id)
 
@@ -355,6 +369,16 @@ async def test_get_team_private_source_as_global_reviewer_returns_200(role):
         await _seed(sessions, team, private)
         r = await client.get(f"/api/v1/component-sources/{private.id}")
         assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_team_private_source_as_global_reviewer_returns_404():
+    team = _team("platform")
+    private = _source("https://github.com/example/private", is_public=False, team_id=team.id)
+    async with _api(_user(role=UserRole.reviewer)) as (client, sessions):
+        await _seed(sessions, team, private)
+        response = await client.get(f"/api/v1/component-sources/{private.id}")
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio

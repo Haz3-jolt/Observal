@@ -199,8 +199,8 @@ async def test_authenticated_recipient_previews_and_requests_access(sessions):
 
     async with _client(sessions, outsider) as client:
         durable = await client.post("/api/v1/teams/invites/preview", json={"token": token})
-    assert durable.json()["valid"] is False
-    assert durable.json()["invite_state"] == "exhausted"
+    assert durable.json()["valid"] is True
+    assert durable.json()["invite_state"] == "active"
     assert durable.json()["team_handle"] == team.handle
     assert durable.json()["request"]["status"] == "pending"
 
@@ -217,7 +217,7 @@ async def test_authenticated_recipient_previews_and_requests_access(sessions):
         invite = (await db.execute(select(TeamInvite))).scalar_one()
         assert membership is None
         assert request.user_id == outsider.id
-        assert invite.use_count == 1
+        assert invite.use_count == 0
         second_outsider = await _user(db)
         await db.commit()
 
@@ -227,8 +227,58 @@ async def test_authenticated_recipient_previews_and_requests_access(sessions):
             f"/api/v1/teams/{team.id}/join-requests",
             json={"invite_token": token},
         )
-    assert exhausted_preview.json()["valid"] is False
-    assert exhausted_request.status_code == 404
+    assert exhausted_preview.json()["valid"] is True
+    assert exhausted_request.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_direct_member_add_consumes_invite_quota(sessions):
+    owner, first, _admin, team = await _seed(sessions)
+    async with sessions() as db:
+        second = await _user(db)
+        await db.commit()
+
+    async with _client(sessions, owner) as client:
+        created = await _create(client, team.id, max_uses=1)
+    token = created.json()["token"]
+
+    for requester in (first, second):
+        async with _client(sessions, requester) as client:
+            response = await client.post(
+                f"/api/v1/teams/{team.id}/join-requests",
+                json={"invite_token": token},
+            )
+        assert response.status_code == 201
+
+    async with _client(sessions, owner) as client:
+        added_first = await client.post(
+            f"/api/v1/teams/{team.id}/members",
+            json={"user_id": str(first.id), "role": "member"},
+        )
+        added_second = await client.post(
+            f"/api/v1/teams/{team.id}/members",
+            json={"user_id": str(second.id), "role": "member"},
+        )
+    assert added_first.status_code == 200
+    assert added_second.status_code == 409
+    assert "no remaining uses" in added_second.json()["detail"]
+
+    async with sessions() as db:
+        invite = await db.get(TeamInvite, uuid.UUID(created.json()["id"]))
+        requests = (
+            (await db.execute(select(TeamMembershipRequest).where(TeamMembershipRequest.team_id == team.id)))
+            .scalars()
+            .all()
+        )
+        second_membership = await db.scalar(
+            select(TeamMembership.id).where(
+                TeamMembership.team_id == team.id,
+                TeamMembership.user_id == second.id,
+            )
+        )
+    assert invite.use_count == 1
+    assert {request.status.value for request in requests} == {"approved", "pending"}
+    assert second_membership is None
 
 
 @pytest.mark.asyncio
@@ -272,12 +322,17 @@ async def test_invite_preview_persists_cancelled_rejected_and_approved_status(se
 
 
 @pytest.mark.asyncio
-async def test_making_team_public_revokes_existing_invites(sessions):
-    owner, outsider, _admin, team = await _seed(sessions)
+async def test_approving_public_visibility_revokes_existing_invites(sessions):
+    owner, outsider, admin, team = await _seed(sessions)
     async with _client(sessions, owner) as client:
         created = await _create(client, team.id)
-        public = await client.patch(f"/api/v1/teams/{team.id}/visibility", json={"visibility": "public"})
-    assert public.status_code == 200
+        requested = await client.patch(f"/api/v1/teams/{team.id}/visibility", json={"visibility": "public"})
+    assert requested.status_code == 200
+    assert requested.json()["visibility_request_status"] == "pending"
+
+    async with _client(sessions, admin) as client:
+        approved = await client.post(f"/api/v1/teams/{team.id}/visibility-request/approve")
+    assert approved.status_code == 200
 
     async with sessions() as db:
         invite = await db.get(TeamInvite, uuid.UUID(created.json()["id"]))

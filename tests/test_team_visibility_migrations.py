@@ -27,6 +27,7 @@ VERSIONS_DIR = Path(__file__).resolve().parents[1] / "observal-server" / "alembi
 # repo convention of NNN_slug for the file and the revision id alike.
 TEAM_PUBLISHING_MIGRATION = VERSIONS_DIR / "018_team_publishing.py"
 COMPONENT_SOURCE_MIGRATION = TEAM_PUBLISHING_MIGRATION
+TEAM_VISIBILITY_REVIEW_MIGRATION = VERSIONS_DIR / "025_team_visibility_review.py"
 
 # Schema operations the migration is allowed to perform. alter_column is here
 # because agents.is_private is added with a false server default and then has that
@@ -58,6 +59,34 @@ def _called_op_methods(node: ast.AST) -> set[str]:
             if isinstance(value, ast.Name):
                 calls.add(f"{value.id}.{child.func.attr}")
     return calls
+
+
+def test_public_visibility_review_migration_uses_next_sequential_revision():
+    migration = _load_migration(TEAM_VISIBILITY_REVIEW_MIGRATION)
+    assert migration.revision == "025_team_visibility_review"
+    assert migration.down_revision == "024_shareable_teamspaces"
+
+
+def test_public_visibility_review_model_matches_migration_constraints():
+    from models.team import Team
+
+    assert {
+        "visibility_request_status",
+        "visibility_requested_by",
+        "visibility_requested_at",
+        "visibility_reviewed_by",
+        "visibility_reviewed_at",
+        "visibility_rejection_reason",
+    } <= set(Team.__table__.columns.keys())
+    assert {constraint.name for constraint in Team.__table__.constraints} >= {
+        "ck_teams_visibility_request_status",
+        "ck_teams_pending_visibility_private",
+        "ck_teams_pending_visibility_requested_at",
+    }
+    assert {key.name for key in Team.__table__.foreign_keys} >= {
+        "fk_teams_visibility_requested_by_users",
+        "fk_teams_visibility_reviewed_by_users",
+    }
 
 
 def test_component_source_migration_only_changes_schema():

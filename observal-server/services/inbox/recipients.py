@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
-from models.team import TeamMembership, TeamRole
+from models.team import Team, TeamMembership, TeamRole
 from models.user import User, UserRole
 from services.teamspace import REVIEWING_TEAM_ROLES
 
@@ -34,36 +34,44 @@ async def _user_ids(db: AsyncSession, stmt) -> list[uuid.UUID]:
 
 
 async def reviewers_for(db: AsyncSession, entity) -> list[uuid.UUID]:
-    """Everyone who may review this entity.
+    """Return the reviewers who should be notified for one pending item.
 
-    This is the set inverse of ``teamspace.can_review``: that function answers
-    "may this caller review this item", and delivery needs "who are those
-    callers". The two must agree exactly, which is why the arms below are
-    written to mirror it line for line rather than approximating it —
-    ``test_reviewers_for_matches_can_review_exactly`` in ``tests/test_inbox.py``
-    asserts the agreement over a user matrix and fails the build if either side
-    drifts.
-
-    can_review: admins review everything; a private item belongs to its
-    teamspace's owners and reviewers; a private item with no teamspace is a
-    personal listing and stays admin-only; a public item is the global catalog.
+    Team-private work notifies only that team's owners and reviewers. Public
+    work notifies global reviewers plus owners and reviewers from its own public
+    teamspace. Review roles from unrelated teamspaces are never included.
+    A private item without a teamspace has no local reviewers, so deployment
+    admins remain its fallback recipients.
     """
-    admins = await _user_ids(db, select(User.id).where(User.role.in_(_ADMIN_ROLES)))
-
+    team_id = getattr(entity, "team_id", None)
     if getattr(entity, "is_private", False):
-        team_id = getattr(entity, "team_id", None)
         if team_id is None:
-            # Personal private listing: nobody holds a team role over it.
-            return admins
-        team_reviewers = await _user_ids(
+            return await _user_ids(db, select(User.id).where(User.role.in_(_ADMIN_ROLES)))
+        return await _user_ids(
             db,
             select(TeamMembership.user_id).where(
                 TeamMembership.team_id == team_id,
                 TeamMembership.role.in_(REVIEWING_TEAM_ROLES),
             ),
         )
-        return _dedupe(admins + team_reviewers)
 
+    global_users = await global_reviewers(db)
+    if team_id is None:
+        return global_users
+    team_reviewers = await _user_ids(
+        db,
+        select(TeamMembership.user_id)
+        .join(Team, Team.id == TeamMembership.team_id)
+        .where(
+            TeamMembership.team_id == team_id,
+            TeamMembership.role.in_(REVIEWING_TEAM_ROLES),
+            Team.is_private.is_(False),
+        ),
+    )
+    return _dedupe(global_users + team_reviewers)
+
+
+async def global_reviewers(db: AsyncSession) -> list[uuid.UUID]:
+    """Global reviewer, admin, and super-admin recipients."""
     return await _user_ids(db, select(User.id).where(User.role.in_(_GLOBAL_REVIEWER_ROLES)))
 
 

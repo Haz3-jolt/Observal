@@ -431,7 +431,7 @@ function ReviewTab({
 			<EmptyState
 				icon={ClipboardCheck}
 				title="Nothing waiting on you"
-				description="Team-private submissions from this teamspace land here for its owners and reviewers. Anything published as public goes to the global review queue instead."
+				description="This teamspace's pending submissions appear here for its owners and reviewers. Public submissions also appear for global reviewers."
 			/>
 		);
 	}
@@ -554,11 +554,12 @@ function VisibilityControl({ team }: { team: Team }) {
 	const updateVisibility = useUpdateTeamVisibility(team.id);
 	if (!canChange) return null;
 	const isPrivate = team.visibility === "private";
+	const pending = team.visibility_request_status === "pending";
 	return (
 		<Button
 			variant="outline"
 			size="sm"
-			onClick={() => updateVisibility.mutate(isPrivate ? "public" : "private")}
+			onClick={() => updateVisibility.mutate(pending ? "private" : isPrivate ? "public" : "private")}
 			disabled={updateVisibility.isPending}
 			title={
 				isPrivate
@@ -571,7 +572,7 @@ function VisibilityControl({ team }: { team: Team }) {
 			) : (
 				<Lock className="mr-1.5 h-3.5 w-3.5" />
 			)}
-			{isPrivate ? "Make public" : "Make private"}
+			{pending ? "Cancel public request" : isPrivate ? "Request public" : "Make private"}
 		</Button>
 	);
 }
@@ -587,8 +588,7 @@ function requesterLabel(request: TeamJoinRequest): string {
  * path onto the roster.
  */
 function JoinRequestControl({ team }: { team: Team }) {
-	const isAdmin = hasMinRole(getUserRole(), "admin");
-	const eligible = !team.is_personal && !team.role && !isAdmin;
+	const eligible = !team.is_personal && !team.role;
 	const { data: mine = [] } = useMyJoinRequests(team.id, eligible);
 	const requestJoin = useRequestJoin(team.id);
 	const cancelRequest = useCancelJoinRequest(team.id);
@@ -1073,15 +1073,16 @@ export default function TeamspaceDetailPage() {
 	const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 	const [deleteOpen, setDeleteOpen] = useState(false);
 	const [componentDialogOpen, setComponentDialogOpen] = useState(false);
+	const isAdmin = hasMinRole(getUserRole(), "admin");
 
-	const canReview = team?.role ? REVIEWING_TEAM_ROLES.includes(team.role) : false;
+	const visibilityPending = team?.visibility_request_status === "pending";
+	const canReview = !visibilityPending && (isAdmin || (team?.role ? REVIEWING_TEAM_ROLES.includes(team.role) : false));
 	const reviewQueue = useTeamReviewQueue(team?.id, canReview);
 	const reviewItems = reviewQueue.data ?? [];
 
 	// Membership requests are owners-and-admins only — a narrower audience than
 	// the listing Review tab, which team reviewers also see.
-	const canManageRequests =
-		!team?.is_personal && (team?.role === "owner" || hasMinRole(getUserRole(), "admin"));
+	const canManageRequests = !visibilityPending && !team?.is_personal && (team?.role === "owner" || isAdmin);
 	const canManageInvites = team?.visibility === "private" && canManageRequests;
 	const joinRequestsQuery = useJoinRequests(team?.id, canManageRequests);
 	const joinRequests = joinRequestsQuery.data ?? [];
@@ -1161,6 +1162,8 @@ export default function TeamspaceDetailPage() {
 
 	const isMember = Boolean(team.role);
 	const isOwner = team.role === "owner";
+	const canPublish = !visibilityPending && (isMember || (isAdmin && !team.is_personal));
+	const canDelete = isOwner || isAdmin;
 
 	return (
 		<>
@@ -1186,7 +1189,7 @@ export default function TeamspaceDetailPage() {
 									<span className="font-mono">{team.handle}</span>
 									<span aria-hidden="true">·</span>
 									<Badge variant="outline" className="px-1.5 py-0 text-[11px] font-medium capitalize">
-										{team.role ?? "discoverable"}
+										{team.role ?? (isAdmin ? "admin access" : "discoverable")}
 									</Badge>
 									{team.visibility === "private" && (
 										<Badge
@@ -1194,6 +1197,11 @@ export default function TeamspaceDetailPage() {
 											className="gap-1 border-primary-accent/40 px-1.5 py-0 text-[11px] font-medium text-primary-accent"
 										>
 											<Lock className="h-3 w-3" /> Private
+										</Badge>
+									)}
+									{team.visibility === "public" && team.visibility_request_status === "approved" && (
+										<Badge variant="outline" className="gap-1 px-1.5 py-0 text-[11px] font-medium text-success">
+											<ShieldCheck className="h-3 w-3" /> Public approved
 										</Badge>
 									)}
 									{team.member_count != null && <span>{team.member_count} members</span>}
@@ -1213,7 +1221,7 @@ export default function TeamspaceDetailPage() {
 							) : null}
 							<VisibilityControl team={team} />
 							<JoinRequestControl team={team} />
-							{isMember && !team.is_personal && (
+							{!visibilityPending && isMember && !team.is_personal && (
 								<Button
 									variant="outline"
 									size="sm"
@@ -1223,7 +1231,7 @@ export default function TeamspaceDetailPage() {
 									<LogOut className="mr-1.5 h-3.5 w-3.5" /> Leave
 								</Button>
 							)}
-							{isOwner && !team.is_personal && (
+							{canDelete && (
 								<Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)} disabled={deleteTeam.isPending}>
 									<Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
 								</Button>
@@ -1231,7 +1239,26 @@ export default function TeamspaceDetailPage() {
 						</div>
 					</header>
 
-					<Tabs value={activeTab} onValueChange={(value) => goto({ tab: value })} className="mt-6">
+					{team.visibility_request_status === "pending" && (
+						<div className="mt-6 rounded-lg border border-warning/40 bg-warning/5 p-5">
+							<p className="text-sm font-semibold text-warning">Public visibility review pending</p>
+							<p className="mt-1 text-sm text-muted-foreground">
+								This teamspace is locked until a global reviewer approves or rejects the request.
+							</p>
+						</div>
+					)}
+					{team.visibility_request_status === "rejected" && (
+						<div className="mt-6 rounded-lg border border-destructive/40 bg-destructive/5 p-5">
+							<p className="text-sm font-semibold text-destructive">Public visibility request rejected</p>
+							{team.visibility_rejection_reason && (
+								<p className="mt-1 text-sm text-muted-foreground">{team.visibility_rejection_reason}</p>
+							)}
+						</div>
+					)}
+
+					{team.visibility_request_status !== "pending" && (
+						<>
+							<Tabs value={activeTab} onValueChange={(value) => goto({ tab: value })} className="mt-6">
 						<div className="flex items-center justify-between gap-3">
 							<TabsList>
 								{tabs.map((entry) => (
@@ -1251,14 +1278,14 @@ export default function TeamspaceDetailPage() {
 								))}
 							</TabsList>
 
-							{isMember && activeTab === "agents" && (
+							{canPublish && activeTab === "agents" && (
 								<Button asChild size="sm">
 									<Link to="/agents/builder" search={{ team: team.id }}>
 										<Bot /> Build agent
 									</Link>
 								</Button>
 							)}
-							{isMember && activeTab === "components" && (
+							{canPublish && activeTab === "components" && (
 								<Button size="sm" onClick={() => setComponentDialogOpen(true)}>
 									<Plus /> Create component
 								</Button>
@@ -1302,9 +1329,9 @@ export default function TeamspaceDetailPage() {
 								<InviteLinksTab team={team} />
 							</TabsContent>
 						)}
-					</Tabs>
+							</Tabs>
 
-					<footer className="mt-6 flex flex-col gap-3 rounded-lg border border-border/80 bg-card/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+							<footer className="mt-6 flex flex-col gap-3 rounded-lg border border-border/80 bg-card/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
 						<div className="flex items-start gap-2.5">
 							<Terminal className="mt-0.5 h-4 w-4 shrink-0 text-primary-accent" />
 							<div>
@@ -1317,7 +1344,9 @@ export default function TeamspaceDetailPage() {
 						<code className="rounded-md border border-border/80 bg-background px-3 py-2 font-mono text-xs text-foreground">
 							observal pull {team.handle}/agent-name
 						</code>
-					</footer>
+							</footer>
+						</>
+					)}
 				</div>
 			</main>
 
@@ -1347,7 +1376,7 @@ export default function TeamspaceDetailPage() {
 					<AlertDialogHeader>
 						<AlertDialogTitle>Delete {team.name}?</AlertDialogTitle>
 						<AlertDialogDescription>
-							This permanently removes the teamspace and its membership records. Published items are not deleted.
+							This permanently removes the empty teamspace and its membership records. Teamspaces that own registry items cannot be deleted.
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>

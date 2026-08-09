@@ -63,6 +63,7 @@ class _FakeDB:
         self.deleted = []
         self.added = []
         self.flush = AsyncMock(side_effect=self._do_flush)
+        self.scalar = AsyncMock(return_value=0)
 
     async def _do_flush(self):
         for obj in self.added:
@@ -123,7 +124,7 @@ async def test_resolve_publish_target_defaults_to_public_user_namespace():
 @pytest.mark.asyncio
 async def test_resolve_publish_target_allows_team_member_and_private_visibility():
     team_id = uuid.uuid4()
-    team = SimpleNamespace(id=team_id, handle="platform-tools")
+    team = SimpleNamespace(id=team_id, handle="platform-tools", is_private=False, is_personal=False)
     member = SimpleNamespace(role=TeamRole.member)
     db = _FakeDB([member])
     db.get = AsyncMock(return_value=team)
@@ -135,33 +136,34 @@ async def test_resolve_publish_target_allows_team_member_and_private_visibility(
 
 
 @pytest.mark.asyncio
-async def test_resolve_publish_target_rejects_non_member():
+@pytest.mark.parametrize("role", [UserRole.user, UserRole.reviewer])
+async def test_resolve_publish_target_rejects_non_member(role):
     team_id = uuid.uuid4()
     db = _FakeDB([None])
-    db.get = AsyncMock(return_value=SimpleNamespace(id=team_id, handle="platform-tools"))
+    db.get = AsyncMock(
+        return_value=SimpleNamespace(id=team_id, handle="platform-tools", is_private=False, is_personal=False)
+    )
     with pytest.raises(HTTPException) as exc:
-        await resolve_publish_target(db, _user(), "Internal Tool", team_id=team_id)
+        await resolve_publish_target(db, _user(role), "Internal Tool", team_id=team_id)
     assert exc.value.status_code == 403
 
 
 # ── auto-approval matrix ────────────────────────────────────────────
-# Team roles are self-service, so they clear review for team-visibility listings
-# only. Publishing PUBLIC out of a team namespace always waits for global review.
+# Team publishing always enters review. Review-capable users may then record an
+# explicit decision, including on their own submission.
 
 # (label, user role, team role or None, visibility, expected auto_approve)
 _AUTO_APPROVE_MATRIX = [
     ("team-owner-public", UserRole.user, TeamRole.owner, "public", False),
-    ("team-owner-team", UserRole.user, TeamRole.owner, "team", True),
+    ("team-owner-team", UserRole.user, TeamRole.owner, "team", False),
     ("team-reviewer-public", UserRole.user, TeamRole.reviewer, "public", False),
-    ("team-reviewer-team", UserRole.user, TeamRole.reviewer, "team", True),
+    ("team-reviewer-team", UserRole.user, TeamRole.reviewer, "team", False),
     ("team-member-public", UserRole.user, TeamRole.member, "public", False),
     ("team-member-team", UserRole.user, TeamRole.member, "team", False),
-    ("global-reviewer-public", UserRole.reviewer, None, "public", True),
-    ("global-reviewer-team", UserRole.reviewer, None, "team", True),
-    ("admin-public", UserRole.admin, None, "public", True),
-    ("admin-team", UserRole.admin, None, "team", True),
-    ("super-admin-public", UserRole.super_admin, None, "public", True),
-    ("super-admin-team", UserRole.super_admin, None, "team", True),
+    ("admin-public", UserRole.admin, None, "public", False),
+    ("admin-team", UserRole.admin, None, "team", False),
+    ("super-admin-public", UserRole.super_admin, None, "public", False),
+    ("super-admin-team", UserRole.super_admin, None, "team", False),
 ]
 
 
@@ -174,7 +176,9 @@ async def test_resolve_publish_target_auto_approve_matrix(user_role, team_role, 
     team_id = uuid.uuid4()
     membership = SimpleNamespace(role=team_role) if team_role is not None else None
     db = _FakeDB([membership])
-    db.get = AsyncMock(return_value=SimpleNamespace(id=team_id, handle="platform-tools"))
+    db.get = AsyncMock(
+        return_value=SimpleNamespace(id=team_id, handle="platform-tools", is_private=False, is_personal=False)
+    )
 
     target = await resolve_publish_target(db, _user(user_role), "Internal Tool", team_id=team_id, visibility=visibility)
 
@@ -301,6 +305,8 @@ async def test_create_team_slugifies_and_reserves(monkeypatch):
     db = _FakeDB([])
     db.refresh = AsyncMock()
     monkeypatch.setattr(mod, "reserve_handle", _reserve)
+    monkeypatch.setattr(mod, "_emit_visibility_event", AsyncMock())
+    monkeypatch.setattr(mod.inbox_sources, "on_team_visibility_requested", AsyncMock())
 
     req = mod.TeamCreateRequest(name="Platform Tools", handle="Platform Tools!", description="desc")
     resp = await mod.create_team(req, db, creator)
@@ -308,6 +314,8 @@ async def test_create_team_slugifies_and_reserves(monkeypatch):
     assert resp.handle == "platform-tools"
     assert resp.role == TeamRole.owner.value
     assert resp.member_count == 1
+    assert resp.visibility == "private"
+    assert resp.visibility_request_status == "pending"
     assert db.committed is True
 
 
@@ -330,18 +338,20 @@ async def test_create_team_handle_collision_returns_409(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_non_reviewer_cannot_create_team():
-    """create_team requires reviewer role. Call require_role directly with
-    a low-privilege user and assert 403 rejection."""
-    from unittest.mock import AsyncMock, patch
+async def test_any_signed_in_user_can_create_team(monkeypatch):
+    mod = _import_routes()
+    user = _user(UserRole.user)
+    db = _FakeDB([])
+    monkeypatch.setattr(mod, "reserve_handle", AsyncMock(return_value="user-team"))
 
-    from api.deps import require_role
+    response = await mod.create_team(
+        mod.TeamCreateRequest(name="User Team", visibility="private"),
+        db,
+        user,
+    )
 
-    user = SimpleNamespace(id=uuid.uuid4(), role=UserRole.user, username="user", email="user@test.com")
-    dep = require_role(UserRole.reviewer)
-    with patch("api.deps.emit_security_event", new=AsyncMock()), pytest.raises(HTTPException) as exc:
-        await dep(current_user=user)
-    assert exc.value.status_code == 403
+    assert response.role == TeamRole.owner.value
+    assert response.visibility == "private"
 
 
 # ── routes: owner/admin authz for membership ────────────────────────
@@ -350,7 +360,16 @@ async def test_non_reviewer_cannot_create_team():
 @pytest.mark.asyncio
 async def test_upsert_member_requires_owner_or_admin(monkeypatch):
     mod = _import_routes()
-    team = SimpleNamespace(id=uuid.uuid4(), handle="t", name="T", description=None, created_at=None)
+    team = SimpleNamespace(
+        id=uuid.uuid4(),
+        handle="t",
+        name="T",
+        description=None,
+        created_at=None,
+        is_private=False,
+        is_personal=False,
+        visibility_request_status=None,
+    )
     owner = _user(UserRole.user, username="owner")
     outsider = _user(UserRole.user, username="outsider")
 
@@ -365,7 +384,7 @@ async def test_upsert_member_requires_owner_or_admin(monkeypatch):
     async def _membership_none(db, tid, uid):
         return None
 
-    db = _FakeDB([])
+    db = _FakeDB([team, None, team])
     db.get = AsyncMock(side_effect=_get)
     db.flush = AsyncMock()
     db.commit = AsyncMock()
@@ -388,7 +407,16 @@ async def test_upsert_member_requires_owner_or_admin(monkeypatch):
 @pytest.mark.asyncio
 async def test_upsert_member_updates_existing_role(monkeypatch):
     mod = _import_routes()
-    team = SimpleNamespace(id=uuid.uuid4(), handle="t", name="T", description=None, created_at=None)
+    team = SimpleNamespace(
+        id=uuid.uuid4(),
+        handle="t",
+        name="T",
+        description=None,
+        created_at=None,
+        is_private=False,
+        is_personal=False,
+        visibility_request_status=None,
+    )
     owner = _user(UserRole.user, username="owner")
     target = _user(UserRole.user, username="member")
     owner_membership = SimpleNamespace(role=TeamRole.owner, team_id=team.id, user_id=owner.id)
@@ -400,7 +428,7 @@ async def test_upsert_member_updates_existing_role(monkeypatch):
     async def _membership(db, tid, uid):
         return owner_membership if uid == owner.id else target_membership
 
-    db = _FakeDB([])
+    db = _FakeDB([team, None])
     db.get = AsyncMock(side_effect=_get)
     monkeypatch.setattr(mod, "team_membership", _membership)
     monkeypatch.setattr(mod, "_resolve_member", AsyncMock(return_value=target))
@@ -415,7 +443,16 @@ async def test_upsert_member_updates_existing_role(monkeypatch):
 @pytest.mark.asyncio
 async def test_remove_last_owner_blocked(monkeypatch):
     mod = _import_routes()
-    team = SimpleNamespace(id=uuid.uuid4(), handle="t", name="T", description=None, created_at=None)
+    team = SimpleNamespace(
+        id=uuid.uuid4(),
+        handle="t",
+        name="T",
+        description=None,
+        created_at=None,
+        is_private=False,
+        is_personal=False,
+        visibility_request_status=None,
+    )
     owner = _user(UserRole.user, username="owner")
     membership = SimpleNamespace(role=TeamRole.owner, team_id=team.id, user_id=owner.id)
 
@@ -428,7 +465,7 @@ async def test_remove_last_owner_blocked(monkeypatch):
     async def _count(db, tid, **kwargs):
         return 1
 
-    db = _FakeDB([])
+    db = _FakeDB([team])
     db.get = AsyncMock(side_effect=_get)
     monkeypatch.setattr(mod, "team_membership", _membership)
     monkeypatch.setattr(mod, "count_owners", _count)
@@ -441,7 +478,16 @@ async def test_remove_last_owner_blocked(monkeypatch):
 @pytest.mark.asyncio
 async def test_leave_last_owner_blocked(monkeypatch):
     mod = _import_routes()
-    team = SimpleNamespace(id=uuid.uuid4(), handle="t", name="T", description=None, created_at=None)
+    team = SimpleNamespace(
+        id=uuid.uuid4(),
+        handle="t",
+        name="T",
+        description=None,
+        created_at=None,
+        is_private=False,
+        is_personal=False,
+        visibility_request_status=None,
+    )
     owner = _user(UserRole.user, username="owner")
     membership = SimpleNamespace(role=TeamRole.owner, team_id=team.id, user_id=owner.id)
 
@@ -454,7 +500,7 @@ async def test_leave_last_owner_blocked(monkeypatch):
     async def _count(db, tid, **kwargs):
         return 1
 
-    db = _FakeDB([])
+    db = _FakeDB([team])
     db.get = AsyncMock(side_effect=_get)
     monkeypatch.setattr(mod, "team_membership", _membership)
     monkeypatch.setattr(mod, "count_owners", _count)
@@ -467,7 +513,16 @@ async def test_leave_last_owner_blocked(monkeypatch):
 @pytest.mark.asyncio
 async def test_delete_team_owner_or_admin_only(monkeypatch):
     mod = _import_routes()
-    team = SimpleNamespace(id=uuid.uuid4(), handle="t", name="T", description=None, created_at=None)
+    team = SimpleNamespace(
+        id=uuid.uuid4(),
+        handle="t",
+        name="T",
+        description=None,
+        created_at=None,
+        is_private=False,
+        is_personal=False,
+        visibility_request_status=None,
+    )
     owner = _user(UserRole.user, username="owner")
     member = _user(UserRole.user, username="member")
 
@@ -480,7 +535,7 @@ async def test_delete_team_owner_or_admin_only(monkeypatch):
     async def _membership_member(db, tid, uid):
         return SimpleNamespace(role=TeamRole.member)
 
-    db = _FakeDB([])
+    db = _FakeDB([team, team])
     db.get = AsyncMock(side_effect=_get)
     db.delete = AsyncMock()
     db.commit = AsyncMock()
@@ -498,7 +553,16 @@ async def test_delete_team_owner_or_admin_only(monkeypatch):
 @pytest.mark.asyncio
 async def test_list_members_only_for_members(monkeypatch):
     mod = _import_routes()
-    team = SimpleNamespace(id=uuid.uuid4(), handle="t", name="T", description=None, created_at=None)
+    team = SimpleNamespace(
+        id=uuid.uuid4(),
+        handle="t",
+        name="T",
+        description=None,
+        created_at=None,
+        is_private=False,
+        is_personal=False,
+        visibility_request_status=None,
+    )
     member = _user(UserRole.user, username="mem")
     outsider = _user(UserRole.user, username="out")
 

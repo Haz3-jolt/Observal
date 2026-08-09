@@ -11,8 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useAllTeams, useClaimPersonalTeamspace, useCreateTeam, useTeams } from "@/hooks/use-api";
+import { useAllTeams, useClaimPersonalTeamspace, useCreateTeam } from "@/hooks/use-api";
+import { hasMinRole } from "@/hooks/use-role-guard";
+import { getUserRole } from "@/lib/api";
 import { slugifyRegistryText } from "@/lib/registry-name";
+import { cn } from "@/lib/utils";
 import type { Team } from "@/lib/types";
 
 const CONTROL_CLASS_NAME =
@@ -23,7 +26,7 @@ function slugifyHandle(value: string) {
 	return base && base.length < 3 ? `${base}-team` : base;
 }
 
-function TeamspaceCard({ team }: { team: Team }) {
+function TeamspaceCard({ team, isAdmin }: { team: Team; isAdmin: boolean }) {
 	return (
 		<Link
 			to="/teamspaces/$handle"
@@ -51,8 +54,28 @@ function TeamspaceCard({ team }: { team: Team }) {
 			)}
 
 			<div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+				{team.visibility_request_status &&
+					(team.visibility_request_status !== "approved" || team.visibility === "public") && (
+					<Badge
+						variant="outline"
+						className={cn(
+							"px-1.5 py-0 text-[10px] font-medium",
+							team.visibility_request_status === "pending"
+								? "text-warning"
+								: team.visibility_request_status === "approved"
+									? "text-success"
+									: "text-destructive",
+						)}
+					>
+						{team.visibility_request_status === "pending"
+							? "Pending public review"
+							: team.visibility_request_status === "approved"
+								? "Public approved"
+								: "Public request rejected"}
+					</Badge>
+				)}
 				<Badge variant="outline" className="px-1.5 py-0 text-[10px] font-medium capitalize">
-					{team.role ?? "discoverable"}
+					{team.role ?? (isAdmin ? "admin access" : "discoverable")}
 				</Badge>
 				{team.member_count != null && (
 					<span className="inline-flex items-center gap-1">
@@ -227,12 +250,12 @@ function CreatePanel({
 										{
 											value: "public" as const,
 											title: "Public",
-											blurb: "Discoverable by every signed-in user; anyone can request to join.",
+											blurb: "Requires reviewer approval. The teamspace stays locked and private until approved.",
 										},
 										{
 											value: "private" as const,
 											title: "Private",
-											blurb: "Hidden from non-members. Admins and global reviewers still see it.",
+											blurb: "Hidden from non-members. Admins and super admins still see it.",
 										},
 									]
 								).map((option) => (
@@ -293,7 +316,7 @@ function CreatePanel({
 								disabled={!name.trim() || createTeam.isPending}
 							>
 								{createTeam.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-								Create teamspace
+								{visibility === "public" ? "Submit for review" : "Create teamspace"}
 							</Button>
 						</div>
 					</footer>
@@ -304,22 +327,19 @@ function CreatePanel({
 }
 
 export default function TeamspacesPage() {
-	const { data: teams = [], isLoading: isTeamsLoading } = useTeams();
-	const { data: allTeams = [], isLoading: isAllTeamsLoading } = useAllTeams();
+	const { data: teams = [], isLoading } = useAllTeams();
+	const isAdmin = hasMinRole(getUserRole(), "admin");
 	const [showCreate, setShowCreate] = useState(false);
 	const [teamQuery, setTeamQuery] = useState("");
 
-	const browse = teams.length === 0 ? allTeams : teams;
-	const isLoading = isTeamsLoading || (teams.length === 0 && isAllTeamsLoading);
 	const query = teamQuery.trim().toLowerCase();
-	const filteredTeams = browse.filter(
+	const filteredTeams = teams.filter(
 		(team) => !query || team.name.toLowerCase().includes(query) || team.handle.toLowerCase().includes(query),
 	);
 	// Any signed-in user can create a teamspace, so the first-run panel needs
 	// no role gate.
-	const firstTeamspace = !isLoading && browse.length === 0;
-	const personalClaimed = teams.some((team) => team.is_personal);
-	const listTitle = teams.length > 0 ? "Your teamspaces" : "Discover teamspaces";
+	const firstTeamspace = !isLoading && teams.length === 0;
+	const personalClaimed = teams.some((team) => team.is_personal && team.role === "owner");
 
 	return (
 		<>
@@ -337,14 +357,14 @@ export default function TeamspacesPage() {
 						<>
 							<header className="flex flex-col gap-4 border-b border-border/80 pb-5 sm:flex-row sm:items-end sm:justify-between">
 								<div>
-									<h2 className="text-xl font-semibold tracking-tight">{listTitle}</h2>
+									<h2 className="text-xl font-semibold tracking-tight">All visible teamspaces</h2>
 									<p className="mt-1 text-sm text-muted-foreground">
 										Shared publishing namespaces. Open one to browse its agents and components, manage members, and
 										clear its review queue.
 									</p>
 								</div>
 								<div className="flex items-center gap-2">
-									{browse.length > 0 && (
+									{teams.length > 0 && (
 										<div className="relative">
 											<Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
 											<Input
@@ -375,7 +395,7 @@ export default function TeamspacesPage() {
 										<div className="h-32 animate-pulse rounded-lg bg-muted/60" />
 										<div className="h-32 animate-pulse rounded-lg bg-muted/60" />
 									</div>
-								) : browse.length === 0 ? (
+								) : teams.length === 0 ? (
 									<EmptyState
 										icon={Users}
 										title="No teamspaces to browse"
@@ -385,12 +405,12 @@ export default function TeamspacesPage() {
 									<EmptyState
 										icon={Search}
 										title="No matching teamspaces"
-										description={`Nothing matches "${teamQuery.trim()}". Clear the search to see all ${browse.length}.`}
+										description={`Nothing matches "${teamQuery.trim()}". Clear the search to see all ${teams.length}.`}
 									/>
 								) : (
 									<div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
 										{filteredTeams.map((team) => (
-											<TeamspaceCard key={team.id} team={team} />
+											<TeamspaceCard key={team.id} team={team} isAdmin={isAdmin} />
 										))}
 									</div>
 								)}

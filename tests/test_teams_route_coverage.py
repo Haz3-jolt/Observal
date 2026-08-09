@@ -290,6 +290,8 @@ async def test_team_lists_serialize_roles_counts_and_visibility():
             "description": mine.description,
             "visibility": "private",
             "is_personal": True,
+            "visibility_request_status": None,
+            "visibility_rejection_reason": None,
             "role": "owner",
             "member_count": None,
             "created_at": _NOW.isoformat().replace("+00:00", "Z"),
@@ -301,6 +303,8 @@ async def test_team_lists_serialize_roles_counts_and_visibility():
             "description": public.description,
             "visibility": "public",
             "is_personal": False,
+            "visibility_request_status": None,
+            "visibility_rejection_reason": None,
             "role": "member",
             "member_count": None,
             "created_at": _NOW.isoformat().replace("+00:00", "Z"),
@@ -326,7 +330,7 @@ async def test_team_lists_serialize_roles_counts_and_visibility():
 
 
 @pytest.mark.asyncio
-async def test_team_by_handle_normalizes_input_and_admin_gets_owner_view(monkeypatch):
+async def test_team_by_handle_normalizes_input_and_preserves_admin_membership(monkeypatch):
     admin = _user(role=UserRole.admin, username="admin")
     team = _team(private=True, handle="platform")
     database = _db(_Result(one=team))
@@ -336,7 +340,7 @@ async def test_team_by_handle_normalizes_input_and_admin_gets_owner_view(monkeyp
 
     response = await teams.team_by_handle("  @PLATFORM ", database, admin)
 
-    assert response.role == "owner"
+    assert response.role is None
     assert response.member_count == 4
     assert "teams.handle = 'platform'" in _sql(database.execute.await_args.args[0])
 
@@ -372,11 +376,14 @@ async def test_invite_preview_covers_invalid_expired_personal_and_durable_states
     invite = _invite(team, owner)
 
     lookup = AsyncMock(return_value=None)
+    membership_lookup = AsyncMock(return_value=None)
     monkeypatch.setattr(teams, "team_invite_by_token", lookup)
+    monkeypatch.setattr(teams, "team_membership", membership_lookup)
     invalid = await teams.preview_team_invite(teams.TeamInvitePreviewRequest(token="missing"), _db(), actor)
     assert invalid.model_dump() == {
         "valid": False,
         "invite_state": None,
+        "is_member": False,
         "team_id": None,
         "team_name": None,
         "team_handle": None,
@@ -412,9 +419,16 @@ async def test_invite_preview_covers_invalid_expired_personal_and_durable_states
     durable_db.get.side_effect = [team, owner]
     durable = await teams.preview_team_invite(teams.TeamInvitePreviewRequest(token="active"), durable_db, actor)
     assert durable.valid is True
+    assert durable.is_member is False
     assert durable.invited_by == "Owner Name"
     assert durable.request.status == "rejected"
     assert durable.request.decision_reason == "Not yet"
+
+    membership_lookup.return_value = _membership(team, actor)
+    member_db = _db(_Result(one=request))
+    member_db.get.side_effect = [team, owner]
+    member = await teams.preview_team_invite(teams.TeamInvitePreviewRequest(token="active"), member_db, actor)
+    assert member.is_member is True
 
 
 @pytest.mark.asyncio
@@ -422,16 +436,18 @@ async def test_team_detail_serializes_member_and_admin_roles(monkeypatch):
     member = _user(username="member")
     team = _team()
     membership = _membership(team, member, TeamRole.reviewer)
+    membership_lookup = AsyncMock(return_value=membership)
     monkeypatch.setattr(teams, "_load_visible_team", AsyncMock(return_value=team))
-    monkeypatch.setattr(teams, "team_membership", AsyncMock(return_value=membership))
+    monkeypatch.setattr(teams, "team_membership", membership_lookup)
 
     response = await teams.team_detail(team.id, _db(), member)
     assert response.role == "reviewer"
     assert response.model_dump(mode="json")["visibility"] == "public"
 
     admin = _user(role=UserRole.admin, username="admin")
+    membership_lookup.return_value = None
     response = await teams.team_detail(team.id, _db(), admin)
-    assert response.role == "owner"
+    assert response.role is None
 
 
 @pytest.mark.asyncio
@@ -496,23 +512,28 @@ async def test_create_team_maps_namespace_and_database_conflicts_to_409(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_personal_invariants_repair_owner_and_remove_everyone_else():
+async def test_personal_invariants_repair_only_without_evicting_other_members():
     creator = _user()
     stranger = _user(username="stranger")
     team = _team(owner=creator, private=False, personal=True)
     creator_membership = _membership(team, creator, TeamRole.member)
     stranger_membership = _membership(team, stranger, TeamRole.owner)
-    database = _db(_Result(scalars=[creator_membership, stranger_membership]))
+    conflicted_db = _db(_Result(scalars=[creator_membership, stranger_membership]))
 
+    with pytest.raises(HTTPException) as exc:
+        await teams._ensure_personal_team_invariants(conflicted_db, team, creator)
+    _assert_http(exc, 409, "A personal teamspace cannot have other members")
+    conflicted_db.delete.assert_not_awaited()
+    conflicted_db.commit.assert_not_awaited()
+
+    database = _db(_Result(scalars=[creator_membership]))
     await teams._ensure_personal_team_invariants(database, team, creator)
-
     assert team.is_private is True
     assert creator_membership.role == TeamRole.owner
-    database.delete.assert_awaited_once_with(stranger_membership)
     database.commit.assert_awaited_once()
     assert database.execute.await_args.args[0]._for_update_arg is not None
 
-    missing_owner_db = _db(_Result(scalars=[stranger_membership]))
+    missing_owner_db = _db(_Result(scalars=[]))
     await teams._ensure_personal_team_invariants(missing_owner_db, team, creator)
     added = missing_owner_db.add.call_args.args[0]
     assert (added.team_id, added.user_id, added.role) == (team.id, creator.id, TeamRole.owner)
@@ -565,7 +586,7 @@ async def test_claim_personal_adopts_legacy_space(monkeypatch):
     legacy = _team(owner=creator, private=True, handle="legacy-team")
     legacy.description = teams._PERSONAL_TEAM_DESCRIPTION
     membership = _membership(legacy, creator, TeamRole.owner)
-    database = _db(_Result(one=None), _Result(one=legacy))
+    database = _db(_Result(one=None), _Result(one=legacy), _Result(scalars=[creator.id]))
     monkeypatch.setattr(teams, "team_membership", AsyncMock(return_value=membership))
     monkeypatch.setattr(teams, "_ensure_personal_team_invariants", AsyncMock())
     expected = teams.TeamResponse(
@@ -592,7 +613,12 @@ async def test_claim_personal_recovers_legacy_adoption_race(monkeypatch):
     legacy = _team(owner=creator, private=True, handle="legacy-team")
     legacy.description = teams._PERSONAL_TEAM_DESCRIPTION
     winner = _team(owner=creator, private=True, personal=True, handle="winner")
-    database = _db(_Result(one=None), _Result(one=legacy), _Result(one=winner))
+    database = _db(
+        _Result(one=None),
+        _Result(one=legacy),
+        _Result(scalars=[creator.id]),
+        _Result(one=winner),
+    )
     database.commit.side_effect = _integrity_error()
     monkeypatch.setattr(
         teams,
@@ -614,7 +640,12 @@ async def test_claim_personal_recovers_legacy_adoption_race(monkeypatch):
     database.rollback.assert_awaited_once()
     teams._ensure_personal_team_invariants.assert_awaited_once_with(database, winner, creator)
 
-    failed_db = _db(_Result(one=None), _Result(one=legacy), _Result(one=None))
+    failed_db = _db(
+        _Result(one=None),
+        _Result(one=legacy),
+        _Result(scalars=[creator.id]),
+        _Result(one=None),
+    )
     failed_db.commit.side_effect = _integrity_error()
     with pytest.raises(IntegrityError):
         await teams.claim_personal_teamspace(failed_db, creator)
@@ -739,6 +770,7 @@ async def test_update_team_persists_trimmed_fields(monkeypatch):
     team = _team(owner=actor)
     database = _db()
     monkeypatch.setattr(teams, "_require_owner_or_admin", AsyncMock(return_value=team))
+    monkeypatch.setattr(teams, "team_membership", AsyncMock(return_value=_membership(team, actor, TeamRole.owner)))
 
     response = await teams.update_team(
         team.id,
@@ -801,14 +833,16 @@ async def test_visibility_rejects_unauthorized_personal_and_owned_public_items(m
 
 
 @pytest.mark.asyncio
-async def test_visibility_change_revokes_invites_and_emits_audit_event(monkeypatch):
+async def test_public_visibility_change_creates_and_cancels_review_request(monkeypatch):
     admin = _user(role=UserRole.admin, username="admin")
     team = _team(private=True)
-    database = _db(_Result(rows=[]))
+    database = _db()
     monkeypatch.setattr(teams, "_load_team", AsyncMock(return_value=team))
     monkeypatch.setattr(teams, "team_membership", AsyncMock(return_value=None))
-    emitted = AsyncMock()
-    monkeypatch.setattr(teams, "emit_security_event", emitted)
+    requested = AsyncMock()
+    cancelled_notice = AsyncMock()
+    monkeypatch.setattr(teams.inbox_sources, "on_team_visibility_requested", requested)
+    monkeypatch.setattr(teams.inbox_sources, "on_team_visibility_cancelled", cancelled_notice)
 
     response = await teams.update_team_visibility(
         team.id,
@@ -816,41 +850,20 @@ async def test_visibility_change_revokes_invites_and_emits_audit_event(monkeypat
         database,
         admin,
     )
+    assert response.visibility == "private"
+    assert response.visibility_request_status == "pending"
+    assert team.visibility_requested_by == admin.id
+    requested.assert_awaited_once_with(database, team, requester_id=admin.id)
 
-    assert response.visibility == "public"
-    assert response.role == "owner"
-    statement = database.execute.await_args.args[0]
-    sql = _sql(statement)
-    assert "UPDATE team_invites" in sql
-    assert "team_invites.revoked_at IS NULL" in sql
-    event = emitted.await_args.args[0]
-    assert event.event_type == teams.EventType.TEAM_VISIBILITY_CHANGED
-    assert event.actor_id == str(admin.id)
-    assert event.target_id == str(team.id)
-    assert "is now public" in event.detail
-
-    emitted.reset_mock()
-    database.execute.reset_mock()
-    no_change = await teams.update_team_visibility(
-        team.id,
-        teams.TeamVisibilityUpdateRequest(visibility="public"),
-        database,
-        admin,
-    )
-    assert no_change.visibility == "public"
-    database.execute.assert_not_awaited()
-    emitted.assert_not_awaited()
-
-    monkeypatch.setattr(teams, "_team_owned_listing_counts", AsyncMock(return_value={}))
-    private_response = await teams.update_team_visibility(
+    cancelled = await teams.update_team_visibility(
         team.id,
         teams.TeamVisibilityUpdateRequest(visibility="private"),
         database,
         admin,
     )
-    assert private_response.visibility == "private"
-    database.execute.assert_not_awaited()
-    emitted.assert_awaited_once()
+    assert cancelled.visibility == "private"
+    assert team.visibility_request_status is None
+    cancelled_notice.assert_awaited_once_with(database, team, actor_id=admin.id)
 
 
 @pytest.mark.asyncio
@@ -871,28 +884,31 @@ async def test_owned_listing_counts_names_singular_plural_and_public_predicates(
     assert all("team_id" in _sql(call.args[0]) for call in database.scalar.await_args_list)
 
     public_db = _db()
-    public_db.scalar.side_effect = [0, 1, 0, 0, 0, 0]
+    public_db.scalar.side_effect = [0, 1, 0, 0, 0, 0, 2]
     public_counts = await teams._team_owned_listing_counts(public_db, team_id, public_only=True)
-    assert public_counts == {"MCP server": 1}
-    assert public_db.scalar.await_count == 6
-    assert all("is_private IS false" in _sql(call.args[0]) for call in public_db.scalar.await_args_list)
+    assert public_counts == {"MCP server": 1, "component sources": 2}
+    assert public_db.scalar.await_count == 7
+    statements = [_sql(call.args[0]) for call in public_db.scalar.await_args_list]
+    assert all("is_private IS false" in statement for statement in statements[:-1])
+    assert "is_public IS true" in statements[-1]
 
 
 @pytest.mark.asyncio
-async def test_delete_team_guards_personal_owned_and_constraint_races(monkeypatch):
+async def test_delete_team_allows_empty_personal_and_guards_owned_and_constraint_races(monkeypatch):
     actor = _user()
     team = _team(owner=actor)
     personal = _team(owner=actor, private=True, personal=True)
-    database = _db()
     require = AsyncMock(return_value=personal)
     monkeypatch.setattr(teams, "_require_owner_or_admin", require)
     counts = AsyncMock(return_value={})
     monkeypatch.setattr(teams, "_team_owned_listing_counts", counts)
 
-    with pytest.raises(HTTPException) as exc:
-        await teams.delete_team(personal.id, database, actor)
-    _assert_http(exc, 409, "Personal teamspaces cannot be deleted")
+    personal_db = _db()
+    await teams.delete_team(personal.id, personal_db, actor)
+    personal_db.delete.assert_awaited_once_with(personal)
+    personal_db.commit.assert_awaited_once()
 
+    database = _db()
     require.return_value = team
     counts.return_value = {"skills": 2, "agent": 1}
     with pytest.raises(HTTPException) as exc:
@@ -962,6 +978,8 @@ async def test_member_upsert_adds_changes_and_protects_last_owner(monkeypatch):
     target = _user(username="target")
     team = _team(owner=owner)
     database = _db()
+    database.execute.side_effect = None
+    database.execute.return_value = _Result(one=None)
     monkeypatch.setattr(teams, "_require_owner_or_admin", AsyncMock(return_value=team))
     monkeypatch.setattr(teams, "_resolve_member", AsyncMock(return_value=target))
     membership_lookup = AsyncMock(return_value=None)
@@ -1173,27 +1191,20 @@ async def test_create_and_list_invites_reject_ineligible_teamspaces(monkeypatch)
 async def test_revoke_invite_checks_scope_is_idempotent_and_serializes_inviter(monkeypatch):
     owner = _user(username="owner")
     team = _team(owner=owner, private=True)
-    other = _team(owner=owner, private=True)
     invite = _invite(team, owner)
-    database = _db()
     monkeypatch.setattr(teams, "_require_owner_or_admin", AsyncMock(return_value=team))
     emitted = AsyncMock()
     monkeypatch.setattr(teams, "_emit_team_invite_event", emitted)
     monkeypatch.setattr(teams, "_team_invite_response", MagicMock(return_value="response"))
 
-    database.get.return_value = None
+    missing_db = _db(_Result(one=None))
     with pytest.raises(HTTPException) as exc:
-        await teams.revoke_team_invite(team.id, invite.id, database, owner)
+        await teams.revoke_team_invite(team.id, invite.id, missing_db, owner)
     _assert_http(exc, 404, "Invite not found")
+    assert missing_db.execute.await_args.args[0]._for_update_arg is not None
 
-    invite.team_id = other.id
-    database.get.return_value = invite
-    with pytest.raises(HTTPException) as exc:
-        await teams.revoke_team_invite(team.id, invite.id, database, owner)
-    _assert_http(exc, 404, "Invite not found")
-
-    invite.team_id = team.id
-    database.get.side_effect = [invite, owner]
+    database = _db(_Result(one=invite))
+    database.get.return_value = owner
     assert await teams.revoke_team_invite(team.id, invite.id, database, owner) == "response"
     assert invite.revoked_at is not None
     database.commit.assert_awaited_once()
@@ -1202,7 +1213,7 @@ async def test_revoke_invite_checks_scope_is_idempotent_and_serializes_inviter(m
 
     database.commit.reset_mock()
     emitted.reset_mock()
-    database.get.side_effect = [invite, owner]
+    database.execute.side_effect = [_Result(one=invite)]
     await teams.revoke_team_invite(team.id, invite.id, database, owner)
     database.commit.assert_not_awaited()
     emitted.assert_not_awaited()
@@ -1260,7 +1271,7 @@ async def test_delete_invite_locks_row_retains_used_and_audits_unused(monkeypatc
     _assert_http(exc, 409, "Used invites are retained for audit")
 
     invite.use_count = 0
-    database = _db(_Result(one=invite))
+    database = _db(_Result(one=invite), _Result(one=None), _Result())
     await teams.delete_unused_team_invite(team.id, invite.id, database, owner)
     database.delete.assert_awaited_once_with(invite)
     database.commit.assert_awaited_once()
@@ -1388,7 +1399,7 @@ async def test_create_join_request_persists_invite_usage_inbox_and_audit(monkeyp
     row = database.add.call_args.args[0]
     assert row.message == "Please add me"
     assert row.invite_id == invite.id
-    assert invite.use_count == 1
+    assert invite.use_count == 0
     assert response.status == "pending"
     requested.assert_awaited_once_with(database, team, requester_id=actor.id, message="Please add me")
     database.commit.assert_awaited_once()
@@ -1398,12 +1409,7 @@ async def test_create_join_request_persists_invite_usage_inbox_and_audit(monkeyp
         actor,
         "Requested to join 'platform'",
     )
-    invite_event.assert_awaited_once_with(
-        teams.EventType.TEAM_INVITE_REDEEMED,
-        invite,
-        actor,
-        "Invite used to request access",
-    )
+    invite_event.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1489,6 +1495,21 @@ async def test_join_request_lists_apply_visibility_status_and_response_fields(mo
     unfiltered_db = _db(_Result(rows=[]))
     assert await teams.list_join_requests(team.id, None, unfiltered_db, owner) == []
     assert "team_membership_requests.status =" not in _sql(unfiltered_db.execute.await_args.args[0])
+
+
+@pytest.mark.asyncio
+async def test_approve_join_request_rejects_personal_team(monkeypatch):
+    owner = _user(username="owner")
+    team = _team(owner=owner, private=True, personal=True)
+    database = _db()
+    monkeypatch.setattr(teams, "_require_owner_or_admin", AsyncMock(return_value=team))
+    load = AsyncMock()
+    monkeypatch.setattr(teams, "_load_join_request", load)
+
+    with pytest.raises(HTTPException) as exc:
+        await teams.approve_join_request(team.id, uuid.uuid4(), database, owner)
+    _assert_http(exc, 409, "Personal teamspaces cannot approve join requests")
+    load.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1620,8 +1641,10 @@ async def test_cancel_join_request_enforces_requester_pending_state_and_persists
     team = _team()
     row = _join_request(team, requester)
     database = _db()
+    database.execute.side_effect = None
+    database.execute.return_value = _Result(one=row)
     monkeypatch.setattr(teams, "_load_team", AsyncMock(return_value=team))
-    monkeypatch.setattr(teams, "_load_join_request", AsyncMock(return_value=row))
+    monkeypatch.setattr(teams, "team_membership", AsyncMock(return_value=None))
     cancelled = AsyncMock()
     monkeypatch.setattr(teams.inbox_sources, "on_team_join_cancelled", cancelled)
 
@@ -1641,3 +1664,16 @@ async def test_cancel_join_request_enforces_requester_pending_state_and_persists
     assert row.decided_at is not None
     cancelled.assert_awaited_once_with(database, team, requester_id=requester.id)
     database.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cancel_join_request_hides_private_team_from_non_requesters(monkeypatch):
+    outsider = _user(username="outsider")
+    team = _team(private=True)
+    database = _db(_Result(one=None))
+    monkeypatch.setattr(teams, "_load_team", AsyncMock(return_value=team))
+    monkeypatch.setattr(teams, "team_membership", AsyncMock(return_value=None))
+
+    with pytest.raises(HTTPException) as exc:
+        await teams.cancel_join_request(team.id, uuid.uuid4(), database, outsider)
+    _assert_http(exc, 404, "Team not found")

@@ -28,7 +28,7 @@ router = APIRouter(prefix="/api/v1/component-sources", tags=["component-sources"
 
 
 async def _source_visible(source: ComponentSource, current_user: User, db: AsyncSession) -> bool:
-    if source.is_public or current_user.role in (UserRole.super_admin, UserRole.admin, UserRole.reviewer):
+    if source.is_public or is_admin(current_user):
         return True
     if source.team_id is None:
         return False
@@ -92,7 +92,7 @@ async def list_sources(
     stmt = select(ComponentSource)
     if component_type:
         stmt = stmt.where(ComponentSource.component_type == component_type)
-    if current_user.role not in (UserRole.super_admin, UserRole.admin, UserRole.reviewer):
+    if not is_admin(current_user):
         member = (
             select(TeamMembership.id)
             .where(TeamMembership.team_id == ComponentSource.team_id, TeamMembership.user_id == current_user.id)

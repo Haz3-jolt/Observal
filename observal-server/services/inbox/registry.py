@@ -241,11 +241,12 @@ SPECS: dict[InboxKind, KindSpec] = {
     ),
     InboxKind.team_created_pending: KindSpec(
         kind=InboxKind.team_created_pending,
-        # RESERVED - waits on teamspace creation requiring approval.
-        reserved=True,
         action_required=True,
         title=lambda s, c: f"Teamspace awaiting approval: {_label(s)}",
         dedupe=lambda s, c: f"team_created_pending:{s.id}",
+        url=lambda s: "/review?tab=teamspaces",
+        # The team is deliberately private while global review is pending.
+        recheck_visibility=False,
     ),
     InboxKind.ownership_transfer: KindSpec(
         kind=InboxKind.ownership_transfer,

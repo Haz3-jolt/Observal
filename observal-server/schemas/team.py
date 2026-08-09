@@ -26,6 +26,10 @@ class TeamVisibilityUpdateRequest(BaseModel):
     visibility: Literal["public", "private"]
 
 
+class TeamVisibilityDecisionRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class TeamResponse(BaseModel):
     id: uuid.UUID
     name: str
@@ -33,10 +37,22 @@ class TeamResponse(BaseModel):
     description: str | None = None
     visibility: str = "public"
     is_personal: bool = False
+    visibility_request_status: Literal["pending", "approved", "rejected"] | None = None
+    visibility_rejection_reason: str | None = None
     role: str | None = None
     member_count: int | None = None
     created_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
+
+
+class TeamVisibilityRequestResponse(BaseModel):
+    team_id: uuid.UUID
+    name: str
+    handle: str
+    description: str | None = None
+    requested_by: uuid.UUID | None
+    requested_by_username: str | None = None
+    requested_at: datetime
 
 
 class TeamMemberResponse(BaseModel):
@@ -111,6 +127,7 @@ class TeamInviteCallerRequestResponse(BaseModel):
 class TeamInvitePreviewResponse(BaseModel):
     valid: bool
     invite_state: str | None = None
+    is_member: bool = False
     team_id: uuid.UUID | None = None
     team_name: str | None = None
     team_handle: str | None = None

@@ -57,6 +57,10 @@ All notable changes to this project will be documented in this file.
 
 ### Fixes
 
+- restore teamspace discovery, membership controls, private join requests, and empty personal deletion
+- require global review before a teamspace becomes public
+- let approved public teamspace owners and reviewers decide all team content
+- move the inbox filter rail to the right
 - require explicit Kiro session identity and keep aged recovery non-final
 - keep intentional CLI downgrades pinned when targeting legacy releases ([#1672](https://github.com/Observal/Observal/pull/1672))
 

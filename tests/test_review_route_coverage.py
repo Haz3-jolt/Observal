@@ -35,6 +35,12 @@ OTHER_TEAM_ID = uuid.UUID(int=4)
 ADMIN_SCOPE = ReviewScope(is_admin=True, is_global_reviewer=True, team_ids=frozenset())
 GLOBAL_SCOPE = ReviewScope(is_admin=False, is_global_reviewer=True, team_ids=frozenset())
 TEAM_SCOPE = ReviewScope(is_admin=False, is_global_reviewer=False, team_ids=frozenset({TEAM_ID}))
+PUBLIC_TEAM_SCOPE = ReviewScope(
+    is_admin=False,
+    is_global_reviewer=False,
+    team_ids=frozenset({TEAM_ID}),
+    public_team_ids=frozenset({TEAM_ID}),
+)
 EMPTY_SCOPE = ReviewScope(is_admin=False, is_global_reviewer=False, team_ids=frozenset())
 
 _UNSET = object()
@@ -185,7 +191,7 @@ def _orm_listing(
     return listing, version
 
 
-def _orm_agent(*, latest_status=AgentStatus.approved):
+def _orm_agent(*, latest_status=AgentStatus.approved, team_id=None):
     agent = Agent(
         id=uuid.UUID(int=500),
         name="review agent",
@@ -193,6 +199,7 @@ def _orm_agent(*, latest_status=AgentStatus.approved):
         slug="review-agent",
         owner="acme",
         created_by=SUBMITTER_ID,
+        team_id=team_id,
         is_private=False,
         created_at=NOW,
         updated_at=NOW,
@@ -308,6 +315,7 @@ def test_item_authorization_and_scope_visibility_are_exact():
     other_private = SimpleNamespace(is_private=True, team_id=OTHER_TEAM_ID)
 
     review._authorize_item(public, GLOBAL_SCOPE)
+    review._authorize_item(public, PUBLIC_TEAM_SCOPE)
     review._authorize_item(private, TEAM_SCOPE)
     assert review._in_scope(private, TEAM_SCOPE, TEAM_ID) is True
     assert review._in_scope(private, TEAM_SCOPE, OTHER_TEAM_ID) is False
@@ -322,7 +330,7 @@ def test_item_authorization_and_scope_visibility_are_exact():
     _assert_http(
         public_denied,
         403,
-        "Public items are reviewed by global reviewers, not by teamspace roles",
+        "Public item is outside your review scope",
     )
 
 
@@ -1015,9 +1023,10 @@ async def test_approve_each_component_type_updates_version_then_notifies_and_com
     listing_type,
 ):
     db = _db()
-    actor = _actor()
-    listing, version = _orm_listing(listing_type)
+    actor = _actor(user_id=SUBMITTER_ID)
+    listing, version = _orm_listing(listing_type, team_id=TEAM_ID)
     events = []
+    decision_boundaries.scope.return_value = PUBLIC_TEAM_SCOPE
     monkeypatch.setattr(review, "_find_listing", AsyncMock(return_value=(listing_type, listing)))
     db.flush.side_effect = lambda: events.append("flush")
     db.execute.side_effect = lambda statement: events.append("update") or _result()
@@ -1115,7 +1124,7 @@ async def test_approve_not_found_and_authorization_fail_before_mutation(monkeypa
     _assert_http(
         forbidden,
         403,
-        "Public items are reviewed by global reviewers, not by teamspace roles",
+        "Public item is outside your review scope",
     )
     assert version.status is ListingStatus.pending
     db.flush.assert_not_awaited()
@@ -1164,9 +1173,10 @@ async def test_reject_each_component_type_records_reason_notifies_and_cascades(
     listing_type,
 ):
     db = _db()
-    actor = _actor()
-    listing, version = _orm_listing(listing_type)
+    actor = _actor(user_id=SUBMITTER_ID)
+    listing, version = _orm_listing(listing_type, team_id=TEAM_ID)
     events = []
+    decision_boundaries.scope.return_value = PUBLIC_TEAM_SCOPE
     monkeypatch.setattr(review, "_find_listing", AsyncMock(return_value=(listing_type, listing)))
     decision_boundaries.decide.side_effect = lambda *args, **kwargs: events.append("inbox")
     db.commit.side_effect = lambda: events.append("commit")
@@ -1273,8 +1283,9 @@ async def test_approve_agent_newest_release_supersedes_older_and_notifies_each_a
     decision_boundaries,
 ):
     db = _db()
-    actor = _actor()
-    agent, current = _orm_agent()
+    actor = _actor(user_id=SUBMITTER_ID)
+    agent, current = _orm_agent(team_id=TEAM_ID)
+    decision_boundaries.scope.return_value = PUBLIC_TEAM_SCOPE
     newest = _pending_version(
         agent.id,
         version="2.0.0",
@@ -1408,8 +1419,9 @@ async def test_reject_agent_rejects_every_pending_version_and_notifies_each_auth
     decision_boundaries,
 ):
     db = _db()
-    actor = _actor()
-    agent, _current = _orm_agent()
+    actor = _actor(user_id=SUBMITTER_ID)
+    agent, _current = _orm_agent(team_id=TEAM_ID)
+    decision_boundaries.scope.return_value = PUBLIC_TEAM_SCOPE
     newest = _pending_version(
         agent.id,
         version="2.0.0",
@@ -1858,7 +1870,7 @@ async def test_bulk_approve_missing_wrong_type_and_scope_fail_before_commit(monk
     _assert_http(
         denied,
         403,
-        "Public items are reviewed by global reviewers, not by teamspace roles",
+        "Public item is outside your review scope",
     )
     assert mcp_version.status is ListingStatus.pending
     decision_boundaries.decide.assert_not_awaited()
@@ -1885,7 +1897,7 @@ async def test_bulk_approve_skill_scope_or_database_failure_does_not_commit(monk
     _assert_http(
         denied,
         403,
-        "Public items are reviewed by global reviewers, not by teamspace roles",
+        "Public item is outside your review scope",
     )
     assert skill_version.status is ListingStatus.pending
     db.commit.assert_not_awaited()
