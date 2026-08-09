@@ -80,8 +80,9 @@ async def diagnostics(
             "users": user_count or 0,
             "demo_accounts": demo_count or 0,
         }
-    except Exception as e:
-        diag["checks"]["database"] = {"status": "error", "detail": str(e)}
+    except Exception:
+        optic.exception("diagnostics database check failed")
+        diag["checks"]["database"] = {"status": "error", "detail": "Database health check failed."}
         diag["status"] = "unhealthy"
 
     # JWT keys

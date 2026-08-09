@@ -151,7 +151,7 @@ async def test_diagnostics_reports_database_keys_and_degraded_runtime(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_diagnostics_reports_owned_failures_without_hiding_them(monkeypatch):
+async def test_diagnostics_reports_owned_failures_without_exposing_them(monkeypatch):
     import services.crypto as crypto
 
     db = _db()
@@ -168,7 +168,7 @@ async def test_diagnostics_reports_owned_failures_without_hiding_them(monkeypatc
     assert response == {
         "status": "unhealthy",
         "checks": {
-            "database": {"status": "error", "detail": "database unavailable"},
+            "database": {"status": "error", "detail": "Database health check failed."},
             "jwt_keys": {"status": "missing", "algorithm": "ES256"},
             "runtime_config": {
                 "status": "ok",
