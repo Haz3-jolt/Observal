@@ -154,7 +154,7 @@ jobs:
           if f"## [{version}]" not in pathlib.Path("CHANGELOG.md").read_text():
               raise SystemExit("release version is missing from CHANGELOG.md")
           notes = pathlib.Path(".github/release-notes.md").read_text()
-          if f"# Observal v{version}" not in notes or "## Contributors" not in notes:
+          if f"{previous_tag}...v{version}" not in notes:
               raise SystemExit("release notes are incomplete")
 
           previous = previous_tag.removeprefix("v").split(".")
