@@ -60,10 +60,6 @@ END_SENTINEL = "<!-- END AUTO-GENERATED COMMAND REFERENCE -->"
 
 MAX_SKILL_LINES = 1500  # Total budget across all skills combined.
 
-# Top-level groups intentionally hidden from the skill (developer-only tools).
-# Mirrors the ``_HIDDEN_GROUPS`` set in scripts/sync_observal_skill.py.
-_HIDDEN_GROUPS = {"server", "migrate", "logs", "support"}
-
 # A few fenced examples are illustrative output rather than runnable commands
 # (e.g. piped placeholders). Skip those during command resolution.
 _PLACEHOLDER_TOKENS = {"<", ">", "..."}
@@ -261,8 +257,6 @@ def _all_command_paths() -> set[tuple[str, ...]]:
         for grp in current.registered_groups:
             if not grp.name:
                 continue
-            if not prefix and grp.name in _HIDDEN_GROUPS:
-                continue
             out.add((*prefix, grp.name))
             if grp.typer_instance is not None:
                 walk((*prefix, grp.name), grp.typer_instance)
@@ -288,6 +282,46 @@ class TestSkillFile:
     def test_reference_file_exists(self):
         """The auto-generated command reference must exist."""
         assert REFERENCE_PATH.exists(), f"{REFERENCE_PATH} is missing"
+
+    def test_installer_preserves_core_skill_references(self, tmp_path, monkeypatch):
+        from observal_cli import skill_installer
+        from observal_shared import harness_registry
+
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setattr(
+            harness_registry,
+            "HARNESS_REGISTRY",
+            {
+                "pi": {
+                    "display_name": "Pi",
+                    "config_dir": ".pi",
+                    "skills": {"user": "~/.pi/agent/skills/{name}/SKILL.md"},
+                }
+            },
+        )
+        (tmp_path / ".pi").mkdir()
+
+        skill_installer.install_observal_skill()
+
+        installed = tmp_path / ".pi/agent/skills/observal"
+        assert (installed / "SKILL.md").is_file()
+        reference = installed / "references/commands.md"
+        assert reference.is_file()
+
+        reference.unlink()
+        reference.parent.rmdir()
+        skill_installer.repair_observal_skill_layout()
+
+        assert reference.is_file()
+
+    def test_single_file_harness_install_preserves_references(self, tmp_path):
+        from observal_cli import skill_installer
+
+        destination = tmp_path / "skills/observal.md"
+        skill_installer._copy_skill(SKILLS_DIR / "observal", destination)
+
+        assert destination.is_file()
+        assert (destination.parent / "references/commands.md").is_file()
 
     def test_skill_under_size_budget(self):
         total = sum(len(p.read_text(encoding="utf-8").splitlines()) for p in ALL_SKILL_PATHS)
@@ -345,7 +379,7 @@ class TestAutoGenBlock:
         text = REFERENCE_PATH.read_text(encoding="utf-8")
         block = text[text.index(BEGIN_SENTINEL) : text.index(END_SENTINEL)]
         for grp in app.registered_groups:
-            if not grp.name or grp.name in _HIDDEN_GROUPS:
+            if not grp.name:
                 continue
             assert f"observal {grp.name}" in block, (
                 f"auto-gen block does not mention top-level group {grp.name!r}. Run scripts/sync_observal_skill.py."

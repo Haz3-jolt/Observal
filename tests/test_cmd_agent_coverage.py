@@ -709,10 +709,12 @@ def test_agent_init_flag_mode_prompt_file_beta_and_harnesses(tmp_path, monkeypat
         "description": "Triage incidents",
         "owner": "alice",
         "model_name": "claude-sonnet-4",
+        "model_config_json": {},
         "models_by_harness": {},
         "prompt": "Triage incidents.",
         "supported_harnesses": ["kiro"],
         "components": [],
+        "external_mcps": [],
         "success_criteria": None,
     }
 

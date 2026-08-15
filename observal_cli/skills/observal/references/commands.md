@@ -205,6 +205,27 @@ Every command available in the installed CLI. This block is generated from the T
 - `observal self rollback`: Restore the CLI binary saved before the last version change.
 - `observal self status`: Show the CLI version, install method, and update availability.
 
+**`observal server`**: Manage the embedded Observal server (PostgreSQL + ClickHouse + Redis + API).
+
+- `observal server migrate`: Portable PostgreSQL and ClickHouse migration tools
+  - `observal server migrate export`: Export all PostgreSQL registry data to a portable archive.
+  - `observal server migrate export-telemetry`: Export ClickHouse telemetry data to Parquet files.
+  - `observal server migrate import`: Import a migration archive into the target database.
+  - `observal server migrate import-telemetry`: Import Parquet telemetry files into target ClickHouse.
+  - `observal server migrate validate`: Validate archive integrity and optionally compare against a database.
+  - `observal server migrate validate-telemetry`: Validate telemetry Parquet files and optionally check FK references.
+- `observal server start`: Start the embedded services and API.
+- `observal server stop`: Stop all embedded services.
+- `observal server restart`: Restart all embedded services.
+- `observal server status`: Show embedded service status.
+- `observal server logs`: Show embedded service logs.
+- `observal server install`: Download verified embedded database binaries.
+- `observal server reset`: Stop embedded services and wipe database data and generated secrets.
+- `observal server config`: Show embedded server paths and ports.
+- `observal server rollback`: Restore PostgreSQL and the Docker image version from backup.
+- `observal server upgrade`: Upgrade a local Docker deployment.
+- `observal server versions`: List Docker image versions and managed PostgreSQL backups.
+
 **`observal team`**: Manage teamspaces: creation, membership, and listing.
 
 - `observal team invite`: Manage private-team invitation links.

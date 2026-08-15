@@ -108,7 +108,7 @@ def main(
 
     _migrate_legacy_mcp_configs()
 
-    # One-time migration: .observal/agent markers → lockfile.json
+    # One-time local state migrations
     _try_lockfile_migration()
 
 
@@ -130,13 +130,21 @@ def _migrate_legacy_mcp_configs() -> None:
             rprint(f"  [dim]{path}[/dim]")
 
 
-def _try_lockfile_migration() -> None:
-    """One-time migration of .observal/agent markers to lockfile.json.
+def _try_bundled_skill_migration() -> None:
+    """Repair skill trees written by older CLI versions."""
+    try:
+        from observal_cli.skill_installer import repair_observal_skill_layout
 
-    Runs only when: lockfile.json doesn't exist but config.json DOES
-    (meaning the user has previously logged in but never had a lockfile).
-    Skips entirely if ~/.observal/ doesn't exist yet (fresh install).
-    """
+        repair_observal_skill_layout()
+    except OSError as error:
+        from loguru import logger as optic
+
+        optic.warning("bundled skill layout repair failed: {}", error)
+
+
+def _try_lockfile_migration() -> None:
+    """Repair bundled skills, then migrate legacy agent markers when needed."""
+    _try_bundled_skill_migration()
     try:
         from observal_cli.lockfile import CONFIG_DIR, LOCKFILE_PATH, migrate_agent_markers
 

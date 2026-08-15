@@ -242,6 +242,50 @@ class TestEditMcpVersionPublish:
         assert result.exit_code == 0, _plain(result.output)
         assert "2.0.0" in _plain(result.output)
 
+    def test_edit_approved_json_bump_uses_empty_optional_changelog(self):
+        mock_client = MagicMock()
+        mock_client.resolve_registry_reference.return_value = "resolved"
+        mock_client.get.return_value = {
+            "id": "abc-123",
+            "status": "approved",
+            "name": "my-mcp",
+            "version": "1.2.3",
+            "description": "Current",
+        }
+        mock_client.post.return_value = {"name": "my-mcp", "version": "1.2.4"}
+
+        with (
+            _patch_config(),
+            _patch_config_load(),
+            _patch_resolve_alias(),
+            patch("observal_cli.cmd_mcp.client", mock_client),
+            patch("observal_cli.cmd_mcp.spinner", MagicMock()),
+            patch("observal_cli.cmd_mcp.text_input") as prompt,
+        ):
+            result = runner.invoke(
+                cli_app,
+                [
+                    "registry",
+                    "mcp",
+                    "edit",
+                    "my-mcp",
+                    "--description",
+                    "Updated",
+                    "--bump",
+                    "patch",
+                    "--output",
+                    "json",
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert json.loads(result.output)["version"] == "1.2.4"
+        prompt.assert_not_called()
+        mock_client.post.assert_called_once_with(
+            "/api/v1/mcps/resolved/versions",
+            {"version": "1.2.4", "description": "Updated"},
+        )
+
     def test_edit_approved_publish_failure(self):
         """Failure to publish a new version exits with error."""
         config_json = json.dumps({"command": "npx", "args": ["-y", "server"]})

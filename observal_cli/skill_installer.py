@@ -8,9 +8,36 @@
 
 """Skill installer - installs bundled Observal skills to detected harnesses."""
 
+import shutil
 from pathlib import Path
 
 from rich import print as rprint
+
+_SKILL_DIRS = [
+    "observal",
+    "observal-agents",
+    "observal-registry",
+    "observal-ops",
+    "observal-admin",
+    "observal-advanced",
+]
+
+
+def _copy_skill(source_dir: Path, dest: Path) -> None:
+    if dest.name == "SKILL.md":
+        shutil.copytree(source_dir, dest.parent, dirs_exist_ok=True)
+        return
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text((source_dir / "SKILL.md").read_text(encoding="utf-8"), encoding="utf-8")
+    for source in source_dir.iterdir():
+        if source.name == "SKILL.md":
+            continue
+        target = dest.parent / source.name
+        if source.is_dir():
+            shutil.copytree(source, target, dirs_exist_ok=True)
+        else:
+            shutil.copy2(source, target)
 
 
 def install_observal_skill():
@@ -25,15 +52,6 @@ def install_observal_skill():
     from observal_shared.harness_registry import HARNESS_REGISTRY
 
     skills_base = Path(__file__).parent / "skills"
-    skill_dirs = [
-        "observal",
-        "observal-agents",
-        "observal-registry",
-        "observal-ops",
-        "observal-admin",
-        "observal-advanced",
-    ]
-
     # Verify at least the core skill exists.
     core_skill = skills_base / "observal" / "SKILL.md"
     if not core_skill.exists():
@@ -55,15 +73,15 @@ def install_observal_skill():
             continue
 
         ide_installed = False
-        for skill_dir in skill_dirs:
-            source = skills_base / skill_dir / "SKILL.md"
+        for skill_dir in _SKILL_DIRS:
+            source_dir = skills_base / skill_dir
+            source = source_dir / "SKILL.md"
             if not source.exists():
                 continue
             resolved = user_path.replace("{name}", skill_dir)
             dest = Path(resolved.replace("~", str(Path.home())))
             try:
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+                _copy_skill(source_dir, dest)
                 ide_installed = True
             except OSError:
                 pass
@@ -94,3 +112,24 @@ def install_observal_skill():
     if installed:
         rprint(f"\n[green]✓ Observal skill installed for:[/green] {', '.join(installed)}")
         rprint('[dim]  LLMs can now use Observal commands directly (e.g. "create a PR agent for kiro")[/dim]')
+
+
+def repair_observal_skill_layout() -> None:
+    """Repair bundled skill trees created by the older single-file installer."""
+    from observal_shared.harness_registry import HARNESS_REGISTRY
+
+    skills_base = Path(__file__).parent / "skills"
+    for spec in HARNESS_REGISTRY.values():
+        user_path = (spec.get("skills") or {}).get("user")
+        if not user_path or not (Path.home() / spec.get("config_dir", "")).exists():
+            continue
+        for skill_dir in _SKILL_DIRS:
+            source_dir = skills_base / skill_dir
+            dest = Path(user_path.replace("{name}", skill_dir).replace("~", str(Path.home())))
+            if not dest.is_file():
+                continue
+            if any(
+                not (dest if path == source_dir / "SKILL.md" else dest.parent / path.relative_to(source_dir)).exists()
+                for path in source_dir.rglob("*")
+            ):
+                _copy_skill(source_dir, dest)

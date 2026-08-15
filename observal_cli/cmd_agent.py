@@ -1229,12 +1229,14 @@ def agent_init(
         "description": description,
         "owner": owner,
         "model_name": model_name or "claude-sonnet-4",
+        "model_config_json": {},
         # Optional per-harness model overrides, e.g. {"kiro": "claude-haiku-4-5"}.
         # Leave empty to use model_name everywhere that accepts a model choice.
         "models_by_harness": {},
         "prompt": prompt_text,
         "supported_harnesses": harnesses,
         "components": [],
+        "external_mcps": [],
         "success_criteria": None,
     }
 

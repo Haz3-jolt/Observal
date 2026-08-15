@@ -548,6 +548,15 @@ def skill_show(
 # ── Install ────────────────────────────────────────────────────────────────────
 
 
+def _normalize_skill_path(skill_path: str | None) -> str:
+    clean_path = (skill_path or "/").strip("/")
+    if clean_path.casefold() == "skill.md":
+        return ""
+    if clean_path.casefold().endswith("/skill.md"):
+        return clean_path.rsplit("/", 1)[0]
+    return clean_path
+
+
 def _sparse_clone_skill_dir(git_url: str, skill_path: str, git_ref: str, dest: Path) -> bool:
     """Sparse-clone only the skill subdirectory from a remote repo.
 
@@ -556,16 +565,14 @@ def _sparse_clone_skill_dir(git_url: str, skill_path: str, git_ref: str, dest: P
     """
     import shutil
 
-    # Guard against None values from API responses
     git_ref = git_ref or "main"
-    skill_path = skill_path or "/"
 
     try:
         subprocess.run(["git", "--version"], check=True, capture_output=True, timeout=5)
     except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return False
 
-    clean_path = skill_path.strip("/")
+    clean_path = _normalize_skill_path(skill_path)
 
     try:
         with tempfile.TemporaryDirectory() as tmp:
@@ -581,14 +588,14 @@ def _sparse_clone_skill_dir(git_url: str, skill_path: str, git_ref: str, dest: P
             sparse_file = tmp_path / ".git" / "info" / "sparse-checkout"
             sparse_file.parent.mkdir(parents=True, exist_ok=True)
             sparse_file.write_text(f"{clean_path}/\n" if clean_path else "/\n")
-            _run(["git", "checkout", f"origin/{git_ref}"])
+            _run(["git", "checkout", "FETCH_HEAD"])
             # Copy skill directory to dest
             src = tmp_path / clean_path if clean_path else tmp_path
             if not src.exists():
                 return False
             shutil.copytree(src, dest, dirs_exist_ok=True)
         return True
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return False
 
 
@@ -607,8 +614,7 @@ def skill_install(
     """Install a skill by fetching the full skill directory from git.
 
     Clones the skill directory (sparse checkout) from the configured git_url
-    and writes it to the appropriate harness skill path. Falls back to cached
-    SKILL.md content if git clone fails.
+    and writes it to the appropriate harness skill path.
 
     Scopes:
       --scope user (default): writes to the harness's global skills directory.
@@ -898,27 +904,19 @@ def install_skill_from_git(
                 rprint(f"[red]✗ Unsafe skill name (path traversal detected):[/red] {esc(repr(skill_name))}")
                 return None
 
-    wrote_full_dir = False
+    if not git_url:
+        rprint("[red]\u2717 Git URL is required for git-fetch skill installation.[/red]")
+        return None
 
-    if git_url:
-        dest.mkdir(parents=True, exist_ok=True)
-        wrote_full_dir = _sparse_clone_skill_dir(git_url, skill_path, git_ref, dest)
-        if wrote_full_dir:
-            rprint(f"[green]\u2713 Skill directory written:[/green] {esc(dest)}")
-            if scope == "project" and not custom_dest:
-                _symlink_for_harnesses(cwd or Path.cwd(), dest, skill_name)
-            return dest
-        rprint("[yellow]\u26a0 git clone failed.[/yellow] Falling back to SKILL.md cache.")
-
-    # Fallback: write cached SKILL.md only
-    if skill_md_content:
-        dest.mkdir(parents=True, exist_ok=True)
-        (dest / "SKILL.md").write_text(skill_md_content, encoding="utf-8")
-        rprint(f"[green]\u2713 Wrote skill file (cached):[/green] {esc(dest / 'SKILL.md')}")
-        return dest
-
-    rprint("[yellow]\u26a0 No skill content available to write.[/yellow]")
-    return None
+    dest.mkdir(parents=True, exist_ok=True)
+    wrote_full_dir = _sparse_clone_skill_dir(git_url, skill_path, git_ref, dest)
+    if not wrote_full_dir:
+        rprint("[red]\u2717 Git skill clone failed.[/red]")
+        return None
+    rprint(f"[green]\u2713 Skill directory written:[/green] {esc(dest)}")
+    if scope == "project" and not custom_dest:
+        _symlink_for_harnesses(cwd or Path.cwd(), dest, skill_name)
+    return dest
 
 
 def _symlink_for_harnesses(cwd: Path, canonical: Path, skill_name: str) -> None:

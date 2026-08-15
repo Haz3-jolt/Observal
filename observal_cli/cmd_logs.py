@@ -103,6 +103,46 @@ def _print_entry(console: Console, entry: dict, *, no_color: bool) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _recent_remote(
+    console: Console,
+    *,
+    level: str,
+    filter_text: str,
+    lines: int,
+    no_color: bool,
+    output: OutputMode | str = "table",
+) -> None:
+    """Fetch and print a finite batch of recent server logs."""
+    if lines == 0:
+        return
+
+    from observal_cli import client
+
+    params: dict = {"level": level, "limit": lines}
+    if filter_text:
+        params["filter"] = filter_text
+    result = client.get(
+        "/api/v1/admin/logs",
+        params,
+        operation="Read recent server logs",
+        resource="server logs",
+    )
+    entries = result.get("entries") if isinstance(result, dict) else None
+    if not isinstance(entries, list) or not all(isinstance(entry, dict) for entry in entries):
+        fail(
+            ErrorCategory.UNAVAILABLE,
+            "The server returned an invalid recent logs response.",
+            operation="Read recent server logs",
+            resource="server logs",
+            remediation="Check server health and version compatibility, then retry.",
+        )
+    for entry in entries:
+        if output == "json":
+            output_json_line({"event": "log", "source": "remote", "log": entry})
+        else:
+            _print_entry(console, entry, no_color=no_color)
+
+
 def _stream_remote(
     console: Console,
     *,
@@ -254,7 +294,17 @@ def logs(
     console = Console(stderr=True, no_color=no_color)
 
     if remote:
-        _stream_remote(console, level=level, filter_text=filter_text, no_color=no_color, output=output)
+        if no_follow:
+            _recent_remote(
+                console,
+                level=level,
+                filter_text=filter_text,
+                lines=lines,
+                no_color=no_color,
+                output=output,
+            )
+        else:
+            _stream_remote(console, level=level, filter_text=filter_text, no_color=no_color, output=output)
         return
 
     # Local file mode

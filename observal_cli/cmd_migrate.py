@@ -173,11 +173,6 @@ migrate_app = typer.Typer(
 )
 
 
-@migrate_app.callback()
-def _migrate_callback() -> None:
-    _require_pyarrow()
-
-
 # ── Export command ───────────────────────────────────────
 
 
@@ -204,6 +199,7 @@ def export_cmd(
         observal server migrate export --db-url postgresql://localhost/observal --file backup.tar.gz
         observal server migrate export --db-url postgresql://localhost/observal --file backup.tar.gz --output json
     """
+    _require_pyarrow()
     output_path = Path(file or f"observal-export-{datetime.now(UTC):%Y%m%d-%H%M%S}.tar.gz").expanduser()
     if output_path.exists():
         fail(
@@ -277,6 +273,7 @@ def import_cmd(
         observal server migrate import --db-url postgresql://localhost/observal --archive backup.tar.gz
         observal server migrate import --db-url postgresql://localhost/observal --archive backup.tar.gz --output json
     """
+    _require_pyarrow()
     archive_path = Path(archive).expanduser()
     if not archive_path.is_file():
         fail(
@@ -354,6 +351,7 @@ def validate_cmd(
         observal server migrate validate --archive backup.tar.gz
         observal server migrate validate --archive backup.tar.gz --output json
     """
+    _require_pyarrow()
     archive_path = Path(archive).expanduser()
     if not archive_path.is_file():
         fail(
@@ -447,6 +445,7 @@ def export_telemetry_cmd(
     Examples:
         observal server migrate export-telemetry --clickhouse-url clickhouses://localhost/observal --manifest ./migration_manifest.json --output-dir ./telemetry-export
     """
+    _require_pyarrow()
     destination = Path(output_dir).expanduser()
     if destination.exists():
         fail(
@@ -514,6 +513,7 @@ def import_telemetry_cmd(
         observal server migrate import-telemetry --clickhouse-url clickhouses://localhost/observal --input-dir ./telemetry-export
         observal server migrate import-telemetry --clickhouse-url clickhouses://localhost/observal --input-dir ./telemetry-export --output json
     """
+    _require_pyarrow()
     _warn_clickhouse_cleartext(clickhouse_url, output)
     input_path = Path(input_dir).expanduser()
     if not input_path.is_dir():
@@ -593,6 +593,7 @@ def validate_telemetry_cmd(
         observal server migrate validate-telemetry --input-dir ./telemetry-export
         observal server migrate validate-telemetry --input-dir ./telemetry-export --output json
     """
+    _require_pyarrow()
     input_path = Path(input_dir).expanduser()
     if not input_path.is_dir():
         fail(

@@ -343,6 +343,30 @@ def test_configuration_failure_propagates_before_version_or_http_boundaries(boun
     assert boundaries.console.calls == []
 
 
+def test_recent_remote_logs_use_finite_endpoint_and_limit(boundaries: SimpleNamespace, monkeypatch) -> None:
+    entry = {"timestamp": "2026-05-17T12:34:56Z", "level": "INFO", "event": "ready"}
+    get = MagicMock(return_value={"entries": [entry], "count": 1, "buffer_size": 10})
+    monkeypatch.setattr(client, "get", get)
+
+    logs._recent_remote(
+        boundaries.console,
+        level="INFO",
+        filter_text="worker",
+        lines=2,
+        no_color=True,
+        output="json",
+    )
+
+    get.assert_called_once_with(
+        "/api/v1/admin/logs",
+        {"level": "INFO", "limit": 2, "filter": "worker"},
+        operation="Read recent server logs",
+        resource="server logs",
+    )
+    assert boundaries.json_lines == [{"event": "log", "source": "remote", "log": entry}]
+    assert boundaries.console.calls == []
+
+
 def test_remote_sse_ignores_framing_and_formats_valid_json(boundaries: SimpleNamespace) -> None:
     entry = {
         "timestamp": "2026-05-17T12:34:56.789Z",
@@ -433,9 +457,11 @@ def test_remote_interrupt_closes_stream_prints_stopped_and_exits_zero(
     exit_process.assert_not_called()
 
 
-def test_remote_mode_dispatches_without_reading_local_path(boundaries: SimpleNamespace, monkeypatch) -> None:
-    remote_stream = MagicMock()
-    monkeypatch.setattr(logs, "_stream_remote", remote_stream)
+def test_remote_finite_mode_dispatches_without_opening_stream(boundaries: SimpleNamespace, monkeypatch) -> None:
+    recent = MagicMock()
+    stream = MagicMock()
+    monkeypatch.setattr(logs, "_recent_remote", recent)
+    monkeypatch.setattr(logs, "_stream_remote", stream)
 
     result = logs.logs(
         level="CRITICAL",
@@ -448,13 +474,15 @@ def test_remote_mode_dispatches_without_reading_local_path(boundaries: SimpleNam
 
     assert result is None
     boundaries.console_factory.assert_called_once_with(stderr=True, no_color=True)
-    remote_stream.assert_called_once_with(
+    recent.assert_called_once_with(
         boundaries.console,
         level="CRITICAL",
         filter_text="worker",
+        lines=3,
         no_color=True,
         output="table",
     )
+    stream.assert_not_called()
     boundaries.sleep.assert_not_called()
 
 

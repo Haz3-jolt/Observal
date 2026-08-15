@@ -566,7 +566,7 @@ def test_sparse_clone_copies_requested_source_without_real_git(tmp_path, monkeyp
 
     installed = skill._sparse_clone_skill_dir(
         "https://github.com/acme/skills",
-        "/skills/review/",
+        "/skills/review/SKILL.md",
         "release",
         destination,
     )
@@ -575,7 +575,7 @@ def test_sparse_clone_copies_requested_source_without_real_git(tmp_path, monkeyp
     assert (destination / "SKILL.md").read_text(encoding="utf-8") == "review"
     assert (checkout / ".git/info/sparse-checkout").read_text(encoding="utf-8") == "skills/review/\n"
     assert run.call_args_list[0] == call(["git", "--version"], check=True, capture_output=True, timeout=5)
-    assert run.call_args_list[-1].args[0] == ["git", "checkout", "origin/release"]
+    assert run.call_args_list[-1].args[0] == ["git", "checkout", "FETCH_HEAD"]
     assert all(entry.kwargs["cwd"] == checkout for entry in run.call_args_list[1:])
 
 
@@ -899,7 +899,7 @@ def test_registry_direct_install_rejects_unsafe_skill_name(tmp_path, monkeypatch
     assert "Unsafe skill name" in capsys.readouterr().out
 
 
-def test_git_install_success_fallback_and_no_content(tmp_path, monkeypatch, capsys):
+def test_git_install_success_and_failures(tmp_path, monkeypatch, capsys):
     project = tmp_path / "project"
     clone = Mock(return_value=True)
     link = Mock()
@@ -926,24 +926,22 @@ def test_git_install_success_fallback_and_no_content(tmp_path, monkeypatch, caps
     assert "Skill directory written" in capsys.readouterr().out
 
     clone.return_value = False
-    fallback = tmp_path / "fallback"
+    failed = tmp_path / "failed"
     assert (
         skill.install_skill_from_git(
             name="Review",
             git_url="https://github.com/acme/review",
             skill_md_content="# Cached",
-            dest=fallback,
+            dest=failed,
         )
-        == fallback
+        is None
     )
-    assert (fallback / "SKILL.md").read_text(encoding="utf-8") == "# Cached"
-    output = capsys.readouterr().out
-    assert "git clone failed" in output
-    assert "cached" in output
+    assert not (failed / "SKILL.md").exists()
+    assert "Git skill clone failed" in capsys.readouterr().out
 
     empty = tmp_path / "empty"
     assert skill.install_skill_from_git(name="Empty", git_url=None, dest=empty) is None
-    assert "No skill content" in capsys.readouterr().out
+    assert "Git URL is required" in capsys.readouterr().out
 
 
 def test_git_install_user_destination_and_unsafe_project_name(tmp_path, monkeypatch, capsys):

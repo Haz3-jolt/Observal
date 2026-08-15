@@ -69,6 +69,16 @@ class TestCLIRegistration:
         assert result.exit_code == 0
         assert "--archive" in _plain(result.output)
 
+    @pytest.mark.parametrize(
+        "command",
+        ["export", "import", "validate", "export-telemetry", "import-telemetry", "validate-telemetry"],
+    )
+    def test_leaf_help_does_not_load_pyarrow(self, command):
+        with patch("observal_cli.cmd_migrate._require_pyarrow", side_effect=AssertionError("loaded pyarrow")):
+            result = runner.invoke(cli_app, ["server", "migrate", command, "--help"])
+
+        assert result.exit_code == 0, result.output
+
 
 class TestPyarrowRequirement:
     def test_passes_when_pyarrow_importable(self):

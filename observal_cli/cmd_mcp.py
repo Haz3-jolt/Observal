@@ -1713,7 +1713,9 @@ def edit_mcp(
             new_version = f"{major}.{minor + 1}.0"
         else:
             new_version = f"{major}.{minor}.{patch + 1}"
-        update_changelog = changelog if changelog is not None else text_input("Changelog (what changed?)", default="")
+        update_changelog = changelog or ""
+        if changelog is None and output != "json":
+            update_changelog = text_input("Changelog (what changed?)", default="")
         version_description = updates.pop("description", None) or listing.get("description", "")
         updates.pop("name", None)
         body: dict = {"version": new_version, "description": version_description}
