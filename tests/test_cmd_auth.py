@@ -551,6 +551,38 @@ def test_login_sso_only_server_forces_browser_flow(monkeypatch: pytest.MonkeyPat
     )
 
 
+def test_quick_choice_restores_terminal_before_printing_selection(monkeypatch: pytest.MonkeyPatch) -> None:
+    import termios
+    import tty
+
+    import rich
+
+    from observal_cli import prompts
+
+    events: list[object] = []
+    stdin = SimpleNamespace(
+        isatty=lambda: True,
+        fileno=lambda: 7,
+        read=MagicMock(return_value="1"),
+    )
+    monkeypatch.setattr(prompts.sys, "stdin", stdin)
+    monkeypatch.setattr(termios, "tcgetattr", lambda _fd: ["saved"])
+    monkeypatch.setattr(tty, "setraw", lambda fd: events.append(("raw", fd)))
+    monkeypatch.setattr(
+        termios,
+        "tcsetattr",
+        lambda fd, when, settings: events.append(("restore", fd, when, settings)),
+    )
+    monkeypatch.setattr(rich, "print", lambda *values, **kwargs: events.append(("print", values, kwargs)))
+
+    assert prompts.quick_choice("Login method", ["1", "2"]) == "1"
+
+    assert events[0] == ("print", ("  Login method: ",), {"end": "", "flush": True})
+    assert events[1] == ("raw", 7)
+    assert events[2][0] == "restore"
+    assert events[3] == ("print", ("1",), {})
+
+
 def test_login_password_menu_prompts_for_identifier_and_password(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
