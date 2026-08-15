@@ -15,7 +15,7 @@ Core administration requires `admin`. Review commands also work for global revie
 ## Critical Rules
 
 1. Execute commands in the shell with a 60-second timeout.
-2. Pass `--output json` for structured finite results.
+2. Use machine output by default: pass `--output json` on every command that supports it. Finite commands return one JSON document; streaming commands return JSON Lines. Use human output only for an explicitly interactive workflow. Use `--raw` only when raw config is requested, and never combine it with `--output json`.
 3. Pass `--force` on destructive JSON commands so they never prompt.
 4. If permission is denied, run `observal auth whoami --output json`.
 5. Never repeat generated passwords, SCIM tokens, submitted headers, database URLs, environment values, or audit content unless the user explicitly needs that secret at creation time.

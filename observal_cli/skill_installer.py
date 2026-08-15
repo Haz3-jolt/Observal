@@ -23,6 +23,12 @@ _SKILL_DIRS = [
 ]
 
 
+def _installed_skill_path(source_dir: Path, source: Path, dest: Path) -> Path:
+    if source == source_dir / "SKILL.md":
+        return dest
+    return dest.parent / source.relative_to(source_dir)
+
+
 def _copy_skill(source_dir: Path, dest: Path) -> None:
     if dest.name == "SKILL.md":
         shutil.copytree(source_dir, dest.parent, dirs_exist_ok=True)
@@ -129,7 +135,9 @@ def repair_observal_skill_layout() -> None:
             if not dest.is_file():
                 continue
             if any(
-                not (dest if path == source_dir / "SKILL.md" else dest.parent / path.relative_to(source_dir)).exists()
-                for path in source_dir.rglob("*")
+                not (target := _installed_skill_path(source_dir, source, dest)).is_file()
+                or target.read_bytes() != source.read_bytes()
+                for source in source_dir.rglob("*")
+                if source.is_file()
             ):
                 _copy_skill(source_dir, dest)

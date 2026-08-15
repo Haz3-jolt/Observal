@@ -13,7 +13,7 @@ owner: observal
 ## Critical Rules
 
 1. **EXECUTE commands**: run them in your shell. Set timeout to 60 seconds.
-2. **Pass `--output json`** on list/show commands.
+2. **Use machine output by default:** pass `--output json` on every command that supports it. Finite commands return one JSON document; streaming commands return JSON Lines. Use human output only for an explicitly interactive workflow. Use `--raw` only when raw config is requested, and never combine it with `--output json`.
 3. **Pass `--yes`** on destructive lifecycle commands (`archive`, `unarchive`) and MCP JSON submit when defaults are acceptable.
 4. **When in doubt about a flag, run `<command> --help` first.**
 5. **`--from-file` does NOT exist on `mcp submit`**: that flag is on `mcp edit`.

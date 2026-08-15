@@ -14,7 +14,7 @@ owner: observal
 
 1. **EXECUTE commands**: run them in your shell. Set timeout to 60 seconds.
 2. **Use single quotes** for `--prompt` and `--description` values.
-3. **Pass `--output json`** on every command. It is stable and machine readable.
+3. **Use machine output by default:** pass `--output json` on every command that supports it. Finite commands return one JSON document; streaming commands return JSON Lines. Use human output only for an explicitly interactive workflow. Use `--raw` only when raw config is requested, and never combine it with `--output json`.
 4. **Pass `--yes`** on destructive commands (`archive`, `delete`, `unarchive`, `bulk-create`).
 5. **Resolve 409:** `observal agent publish --update` for in-place edits, `observal agent release --bump` for reviewed releases.
 6. **When in doubt about a flag, run `<command> --help` first.**

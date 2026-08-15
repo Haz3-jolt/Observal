@@ -13,7 +13,7 @@ owner: observal
 ## Critical Rules
 
 1. **EXECUTE commands**: run them in your shell. Set timeout to 60 seconds.
-2. **Pass `--output json`** on every command for stable, machine-readable output.
+2. **Use machine output by default:** pass `--output json` on every command that supports it. Finite commands return one JSON document; streaming commands return JSON Lines. Use human output only for an explicitly interactive workflow. Use `--raw` only when raw config is requested, and never combine it with `--output json`.
 3. **When in doubt about a flag, run `<command> --help` first.**
 
 ---
@@ -122,7 +122,7 @@ observal ops insights generate AGENT_NAME --period 14 --wait --output json
 For versioned analysis, request or infer versions from `list`, then generate or show version scoped reports:
 
 ```bash
-observal ops insights generate AGENT_NAME --version 1.2.0 --compare 1.1.0 --period 30 --wait
+observal ops insights generate AGENT_NAME --version 1.2.0 --compare 1.1.0 --period 30 --wait --output json
 observal ops insights show AGENT_NAME latest --output json
 ```
 

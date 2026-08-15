@@ -279,6 +279,10 @@ class TestSkillFile:
         for path in ALL_SKILL_PATHS:
             assert path.exists(), f"{path} is missing"
 
+    def test_all_skills_default_to_json_output(self):
+        for path in ALL_SKILL_PATHS:
+            assert "Use machine output by default" in path.read_text(encoding="utf-8")
+
     def test_reference_file_exists(self):
         """The auto-generated command reference must exist."""
         assert REFERENCE_PATH.exists(), f"{REFERENCE_PATH} is missing"
@@ -310,9 +314,11 @@ class TestSkillFile:
 
         reference.unlink()
         reference.parent.rmdir()
+        (installed / "SKILL.md").write_text("stale", encoding="utf-8")
         skill_installer.repair_observal_skill_layout()
 
         assert reference.is_file()
+        assert (installed / "SKILL.md").read_text(encoding="utf-8") == SKILL_PATH.read_text(encoding="utf-8")
 
     def test_single_file_harness_install_preserves_references(self, tmp_path):
         from observal_cli import skill_installer

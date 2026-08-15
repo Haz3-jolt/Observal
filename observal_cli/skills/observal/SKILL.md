@@ -18,7 +18,7 @@ owner: observal
 3. **Use single quotes** for `--prompt` and `--description` values to avoid shell quoting issues.
 4. **Do NOT run `observal auth status` first.** Other commands surface auth problems clearly on their own.
 5. **When in doubt about a flag, run `<command> --help` first.** Never guess flag names.
-6. **Pass `--output json` on every list/show command.** It is stable and machine readable.
+6. **Use machine output by default:** pass `--output json` on every command that supports it. Finite commands return one JSON document; streaming commands return JSON Lines. Use human output only for an explicitly interactive workflow. Use `--raw` only when raw config is requested, and never combine it with `--output json`.
 7. **Pass `--yes` / `-y` on destructive commands** so they do not block on a confirmation prompt.
 8. **Use canonical registry identities:** prefer the returned `qualified_name` (`namespace/slug`) for agent and component show, install, pull, archive, and transfer commands. Bare names work only when unambiguous.
 9. **Resolve 409 conflicts deterministically:** if the error says a name is ambiguous, retry with `namespace/slug`; otherwise use `--update` for in-place edits or `--bump` for versioned releases.
@@ -72,7 +72,7 @@ When pulling for Pi, the CLI downloads the agent into an isolated profile using 
 If the user did not specify an harness, ask which one before running. After install, check local files:
 
 ```bash
-observal scan --harness kiro
+observal scan --harness kiro --output json
 ```
 
 `scan` verifies MCPs, skills, hooks, and agents. Prompts/sandboxes are injected into rules/MCP config; use the pull output/lockfile for membership.
@@ -106,9 +106,9 @@ Use list UUIDs. Reading does not resolve; use `done`, `dismiss`, or `reopen` onl
 Read-only inventory of installed components across all detected harnesses. **Never modifies any file.**
 
 ```bash
-observal scan
-observal scan --harness kiro
-observal scan --harness claude-code
+observal scan --output json
+observal scan --harness kiro --output json
+observal scan --harness claude-code --output json
 ```
 
 Reports: detected harnesses, MCP servers, skills, hooks, agents, and unregistered components.
@@ -214,8 +214,8 @@ Sections: `at_a_glance`, `what_they_work_on`, `interaction_style`, `usage_patter
 For broad questions, run full `show` JSON and summarize health, top friction, top strengths, cost, and next actions. For narrow questions, fetch the specific section. If no completed report exists, offer to generate one:
 
 ```bash
-observal ops insights generate AGENT_NAME --period 14 --wait
-observal ops insights generate AGENT_NAME --version 1.2.0 --compare 1.1.0 --period 30 --wait
+observal ops insights generate AGENT_NAME --period 14 --wait --output json
+observal ops insights generate AGENT_NAME --version 1.2.0 --compare 1.1.0 --period 30 --wait --output json
 ```
 
 Keep the answer grounded in the JSON. Say when the report is missing a section or has low session count.
@@ -230,7 +230,7 @@ Keep the answer grounded in the JSON. Say when the report is missing a section o
 |-------|--------|
 | `Connection failed` | Server unreachable. Use the `observal-advanced` skill's Local Fallback procedure |
 | `Not configured` / `No server` | Run `observal auth login` |
-| `403 Forbidden` | Check `observal auth whoami`; user lacks required role |
+| `403 Forbidden` | Check `observal auth whoami --output json`; user lacks required role |
 | `404 Not found` | Verify `qualified_name` with `observal agent list --output json` |
 | `409 Ambiguous` | Retry with the returned `namespace/slug` identity |
 

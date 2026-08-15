@@ -11,6 +11,12 @@ owner: observal
 
 # Observal Advanced Operations
 
+## Critical Rules
+
+1. Execute commands in the shell with a 60-second timeout.
+2. Use machine output by default: pass `--output json` on every command that supports it. Finite commands return one JSON document; streaming commands return JSON Lines. Use human output only for an explicitly interactive workflow. Use `--raw` only when raw config is requested, and never combine it with `--output json`.
+3. When in doubt about a flag, run `<command> --help` first.
+
 ## Procedure: Reconcile Sessions
 
 Backfill local session records missed by the normally automatic hook or extension pipeline. Do not run it routinely when telemetry is healthy.
