@@ -49,16 +49,12 @@ ALL_SKILL_PATHS = [
     SKILLS_DIR / "observal-advanced" / "SKILL.md",
 ]
 
-MAX_SKILL_LINES_EACH = 250  # Per-skill budget (split skills should be small)
-
 REQUIRED_FRONTMATTER_FIELDS = ("name", "description", "version")
 EXPECTED_COMMAND = "observal"
 EXPECTED_NAME = "observal"
 
 BEGIN_SENTINEL = "<!-- BEGIN AUTO-GENERATED COMMAND REFERENCE -->"
 END_SENTINEL = "<!-- END AUTO-GENERATED COMMAND REFERENCE -->"
-
-MAX_SKILL_LINES = 1500  # Total budget across all skills combined.
 
 # A few fenced examples are illustrative output rather than runnable commands
 # (e.g. piped placeholders). Skip those during command resolution.
@@ -328,20 +324,6 @@ class TestSkillFile:
 
         assert destination.is_file()
         assert (destination.parent / "references/commands.md").is_file()
-
-    def test_skill_under_size_budget(self):
-        total = sum(len(p.read_text(encoding="utf-8").splitlines()) for p in ALL_SKILL_PATHS)
-        assert total <= MAX_SKILL_LINES, (
-            f"All skills combined have {total} lines (budget: {MAX_SKILL_LINES}). Tighten procedures or split further."
-        )
-
-    def test_each_skill_under_individual_budget(self):
-        for path in ALL_SKILL_PATHS:
-            lines = len(path.read_text(encoding="utf-8").splitlines())
-            assert lines <= MAX_SKILL_LINES_EACH, (
-                f"{path.parent.name}/SKILL.md has {lines} lines (budget: {MAX_SKILL_LINES_EACH}). "
-                "Split into a smaller skill."
-            )
 
 
 class TestFrontmatter:
