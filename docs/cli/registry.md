@@ -20,9 +20,9 @@ observal registry <type> <action> [args]
 | `prompt` | yes | yes | yes | yes | no | yes | yes |
 | `sandbox` | yes | yes | no | yes | no | no | yes |
 
-Every component type also supports archive, unarchive, ownership transfer, and co-author management. Registry also contains the `models`, `version`, and `recommend` groups.
+Every component type also supports archive, unarchive, ownership transfer, and co-author management. Registry also contains the `models`, `version`, `recommend`, and mixed `bulk` groups.
 
-All registry references accept a UUID, canonical `namespace/slug`, a unique legacy bare name, a row number from the latest list output for the same component type, or an `@alias`. Empty lists clear row references, and a row from one component type cannot be used with another. If the same bare slug exists in multiple namespaces, qualify it, for example `alice/search` instead of `search`.
+All registry references accept a UUID, canonical `namespace/slug`, a unique legacy bare name, a row number from the latest human list output for the same component type, or an `@alias`. Agents and scripts must use returned UUIDs or `qualified_name` values, never row numbers. If the same bare slug exists in multiple namespaces, qualify it, for example `alice/search` instead of `search`.
 
 ### Shared lifecycle and collaboration commands
 
@@ -35,7 +35,7 @@ observal registry skill co-authors add alice/reviewer bob@example.com --output j
 observal registry skill co-authors remove alice/reviewer <user-uuid> --output json
 ```
 
-Archive, restore, and ownership transfer require explicit confirmation in JSON mode. Their JSON output is the direct server result. Co-author list returns an array; add and remove return the direct server result.
+Archive, restore, and ownership transfer require explicit confirmation in JSON mode. Their JSON output is the direct server result. Co-author list returns the standard list envelope; add and remove return the direct server result.
 
 The namespace is the publisher's username or a teamspace handle. Usernames cannot change after the account owns a registry listing. Team members can browse approved private teamspace items in normal list results. Use `--team TEAM_HANDLE` to include public items plus that team's private items, or `--namespace TEAM_HANDLE` to restrict results to that namespace. Direct references use `team-handle/item-slug`. Nonmembers receive the same not-found response for private items as for unknown items.
 
@@ -52,6 +52,48 @@ observal registry skill show platform-tools/internal-skill --output json
 ```
 
 `public` teamspace items are visible to all registry users. `team` items are visible only to team members and privileged reviewers. Team owners and reviewers can change visibility after publication. A team member's new submission still follows the normal review workflow.
+
+---
+
+## Mixed bulk submission
+
+Submit up to 200 MCP, skill, hook, prompt, and sandbox entries from one JSON file:
+
+```bash
+observal registry bulk submit --from-file components.json --dry-run --output json
+observal registry bulk submit --from-file components.json --yes --output json
+```
+
+The file is a bare array or an object with a `components` array. Each entry contains `type` plus the normal API submission fields:
+
+```json
+{
+  "components": [
+    {
+      "type": "skill",
+      "name": "review-helper",
+      "version": "1.0.0",
+      "description": "Reviews changes",
+      "owner": "alice",
+      "task_type": "code-review",
+      "delivery_mode": "registry_direct",
+      "skill_md_content": "---\nname: review-helper\ndescription: Reviews changes\n---\n"
+    },
+    {
+      "type": "prompt",
+      "name": "review-brief",
+      "description": "Review prompt",
+      "owner": "alice",
+      "category": "general",
+      "template": "Review {{change}}"
+    }
+  ]
+}
+```
+
+Dry run validates file structure without contacting submission endpoints. Execution structurally validates every entry before the first mutation, submits entries in order, reports conflicts as skipped, and returns per-entry IDs, canonical names, review status, and safe errors. Authentication, permission, rate-limit, version, and service failures stop the batch. JSON execution requires `--yes`.
+
+Re-running a partially completed file is safe only after inspecting results. Existing identities are skipped for component types that reject duplicates. Verify created items by returned UUID or `qualified_name`.
 
 ---
 

@@ -116,8 +116,8 @@ def test_list_table_json_empty_and_typed_cache(monkeypatch):
 
     assert table.exit_code == structured.exit_code == empty.exit_code == 0
     assert hostile in table.output
-    assert json.loads(structured.stdout)[0]["id"] == "sandbox-1"
-    assert json.loads(empty.stdout) == []
+    assert json.loads(structured.stdout)["items"][0]["id"] == "sandbox-1"
+    assert json.loads(empty.stdout) == {"items": [], "total": 0, "page": 1, "page_size": 0}
     assert save.call_args_list[-1].args == ([], "sandbox")
 
 

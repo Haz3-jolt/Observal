@@ -112,6 +112,9 @@ def test_empty_results_have_stable_table_and_json_output(
     assert "No installed agents or standalone components" in table.output
     assert json.loads(structured.stdout) == {
         "items": [],
+        "total": 0,
+        "page": 1,
+        "page_size": 0,
         "summary": {"total": 0, "outdated": 0, "current": 0, "missing": 0},
         "report": {
             "requested": True,

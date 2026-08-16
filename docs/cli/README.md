@@ -15,6 +15,7 @@ Complete reference for the `observal` CLI. Every subcommand has its own page; th
 
 | Command                                                                                    | What it does                                                                          |
 | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| [`observal api`](api.md)                                                                   | Call authenticated JSON endpoints without a dedicated command                         |
 | [`observal auth`](auth.md)                                                                 | Authentication and account management                                                 |
 | [`observal config`](config.md)                                                             | Local CLI configuration, aliases                                                      |
 | [`observal scan`](scan.md)                                                                 | Discover what's installed across your harnesses (read-only)                           |
@@ -48,6 +49,21 @@ Any subcommand accepts these.
 | `--verbose` | `-v`  | Verbose output                          |
 | `--debug`   | -     | Debug-level logging (extremely verbose) |
 | `--help`    | -     | Show help for any command or subcommand |
+
+## JSON list contract
+
+Every dedicated list command returns the same envelope:
+
+```json
+{
+  "items": [],
+  "total": 0,
+  "page": 1,
+  "page_size": 0
+}
+```
+
+Paginated commands preserve server totals and requested pages. Unpaginated commands use page 1 and the returned item count as `page_size`. Detail and mutation commands return direct objects. `observal api` intentionally preserves raw endpoint JSON.
 
 ## Exit codes
 

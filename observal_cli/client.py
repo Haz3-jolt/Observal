@@ -264,11 +264,13 @@ def _request_with_retry(
     headers: dict,
     *,
     params: dict | None = None,
-    json: dict | None = None,
+    json: object | None = None,
 ) -> httpx.Response:
-    """Execute an HTTP request with retries on 429/503/504 and Retry-After support.
+    """Execute HTTP with transient retries for GET requests only.
 
-    On 401, attempts a token refresh and retries once.
+    On 401, attempts a token refresh and retries once. Mutations are never
+    retried after a transient response because their server state may be
+    unknown.
     """
     optic.trace("method={}, url={}", method, url)
     timeout = config.get_timeout()
@@ -296,7 +298,7 @@ def _request_with_retry(
             optic.debug("token refreshed, retrying")
             continue
 
-        if r.status_code not in _RETRY_STATUSES or attempt == _MAX_RETRIES - 1:
+        if method != "get" or r.status_code not in _RETRY_STATUSES or attempt == _MAX_RETRIES - 1:
             elapsed = (time.monotonic() - t0) * 1000
             optic.debug("{} {} -> {} ({:.0f}ms)", method.upper(), safe_url, r.status_code, elapsed)
             r.raise_for_status()
@@ -394,7 +396,7 @@ def _request(
     operation: str,
     resource: str,
     params: dict | None = None,
-    json_data: dict | None = None,
+    json_data: object | None = None,
 ) -> httpx.Response:
     base, headers = _client()
     request_kwargs: dict = {}
@@ -412,7 +414,7 @@ def _request(
         _handle_connect(operation=operation, resource=resource, detail=repr(error))
 
 
-def _json_response(response: httpx.Response, *, operation: str, resource: str, allow_empty: bool = False) -> dict:
+def _json_response(response: httpx.Response, *, operation: str, resource: str, allow_empty: bool = False) -> object:
     if allow_empty and (response.status_code == 204 or not response.content):
         return {}
     try:
@@ -439,6 +441,32 @@ def _error_context(
 ) -> tuple[str, str]:
     audited_operation, audited_resource = caller_context(default_operation, default_resource)
     return operation or audited_operation, resource or audited_resource
+
+
+def request_json(
+    method: str,
+    path: str,
+    *,
+    params: dict | None = None,
+    json_data: object | None = None,
+    operation: str | None = None,
+    resource: str | None = None,
+) -> object:
+    """Call one authenticated JSON endpoint through the shared error contract."""
+    method = method.lower()
+    operation, resource = _error_context(
+        operation,
+        resource,
+        default_operation=f"Call {method.upper()} {path}",
+        default_resource=path,
+    )
+    response = _request(method, path, operation=operation, resource=resource, params=params, json_data=json_data)
+    return _json_response(
+        response,
+        operation=operation,
+        resource=resource,
+        allow_empty=method in {"post", "put", "patch", "delete"},
+    )
 
 
 def get(

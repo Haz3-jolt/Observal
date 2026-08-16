@@ -456,7 +456,7 @@ def test_list_filters_json_and_caches_results(monkeypatch):
     )
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output) == data
+    assert json.loads(result.output) == {"items": data, "total": 2, "page": 1, "page_size": 2}
     get.assert_called_once_with(
         "/api/v1/skills",
         params={
@@ -507,7 +507,7 @@ def test_my_empty_json_rejects_plain_and_renders_table(monkeypatch):
     assert "Error" in plain.output
     assert "plain" in plain.output
     assert "You have no skills" in empty.output
-    assert json.loads(as_json.output) == [item]
+    assert json.loads(as_json.output) == {"items": [item], "total": 1, "page": 1, "page_size": 1}
     assert "My Skills (1)" in table.output
     assert save.call_count == 3
 

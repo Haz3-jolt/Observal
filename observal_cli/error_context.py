@@ -23,6 +23,7 @@ OPERATION_LABELS = {
     "_install_impl": "Install MCP server",
     "_list_co_authors": "List co-authors",
     "_list_impl": "List MCP servers",
+    "_owner": "Resolve bulk component owner",
     "_rate_delete": "Delete registry feedback",
     "_rate_impl": "Submit registry feedback",
     "_rate_update": "Update registry feedback",
@@ -73,7 +74,9 @@ OPERATION_LABELS = {
     "agent_unarchive": "Restore agent",
     "agent_versions": "List agent versions",
     "approve_join_request": "Approve teamspace join request",
+    "api_request": "Call Observal API",
     "approve_visibility_request": "Approve teamspace visibility",
+    "bulk_submit_components": "Bulk submit components",
     "bundle": "Generate support bundle",
     "change_password": "Change password",
     "claim_personal_teamspace": "Claim personal teamspace",
@@ -146,7 +149,9 @@ OPERATION_LABELS = {
 
 RESOURCE_LABELS = {
     "cmd_agent.py": "agent registry",
+    "cmd_api.py": "Observal API",
     "cmd_archive.py": "registry component",
+    "cmd_bulk.py": "component registry",
     "cmd_auth.py": "user account",
     "cmd_co_authors.py": "registry co-authors",
     "cmd_component.py": "component versions",

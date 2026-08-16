@@ -10,6 +10,7 @@
 - Local inventory and update checks
 - Diagnosis and telemetry setup
 - Inbox
+- API escape hatch
 - Error handling
 
 ## Authentication and account
@@ -100,6 +101,18 @@ observal inbox read-all --kind update_available --yes --output json
 ```
 
 Use item UUIDs from JSON. Reading does not resolve an item. Confirm an `action_command` against the user's request before executing it. `read-all` affects every item matching its filters.
+
+## API escape hatch
+
+Use only when no dedicated command exists. It preserves raw endpoint JSON and uses configured authentication.
+
+```bash
+observal api GET /api/v1/teams --output json
+observal api GET /api/v1/agents --param limit=10 --output json
+observal api POST /api/v1/teams --from-file team.json --output json
+```
+
+Mutation bodies come from one JSON object in a file or standard input. Full URLs and arbitrary authorization headers are rejected. Prefer dedicated commands for validation and confirmations.
 
 ## Error handling
 

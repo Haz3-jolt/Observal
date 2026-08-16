@@ -4,7 +4,7 @@
 name: observal-agents
 command: observal
 description: "Creates, authors, validates, publishes, updates, versions, pulls, archives, restores, transfers, and manages co-authors for Observal Agents. Use when the user wants to build or install an Agent, change an Agent definition, publish a draft, release a version, or manage Agent ownership."
-version: 2.1.0
+version: 2.2.0
 owner: observal
 ---
 
@@ -13,13 +13,14 @@ owner: observal
 ## Execution contract
 
 1. Execute commands with a 60 second timeout.
-2. **Use machine output by default:** add `--output json` whenever supported and parse the result.
+2. **Use machine output by default:** add `--output json` whenever supported. Parse list results from `items` and pagination fields.
 3. Use `--help` before acting when a path or flag is uncertain.
 4. Keep workflows noninteractive. Supply required fields, `--no-prompt`, and confirmation flags.
 5. Use UUIDs or `qualified_name` values returned by JSON. Never automate with row numbers.
 6. Prefer native `agent init`, `agent add`, and `agent build` over hand-written scaffolding or custom validation.
 7. Verify every publish, release, pull, ownership, and lifecycle mutation.
 8. Never print MCP environment values, headers, tokens, or other secrets.
+9. Mutations are sent once. After an uncertain transport failure, read Agent state before retrying.
 
 ## Choose the workflow
 

@@ -523,7 +523,7 @@ def test_agent_my_empty_json_rejects_plain_and_renders_table(monkeypatch, _isola
     get.return_value = data
     as_json = _invoke("my", "--output", "json")
     assert as_json.exit_code == 0
-    assert json.loads(as_json.output)[0]["status"] == "pending"
+    assert json.loads(as_json.output)["items"][0]["status"] == "pending"
 
     plain = _invoke("my", "--output", "plain")
     assert plain.exit_code == 2
@@ -1084,7 +1084,7 @@ def test_agent_versions_empty_json_and_table(monkeypatch):
     get.return_value = response
     as_json = _invoke("versions", "reviewer", "--output", "json")
     assert as_json.exit_code == 0, as_json.output
-    assert json.loads(as_json.output) == response
+    assert json.loads(as_json.output) == {**response, "total": 2, "page": 1, "page_size": 2}
 
     table = _invoke("versions", "reviewer")
     assert table.exit_code == 0, table.output

@@ -76,7 +76,9 @@ Rules:
 - Type every format option as `OutputMode` and default it to `table`.
 - Use `output_json`; do not render JSON through Rich.
 - Return natural JSON objects. Detail and mutation commands return the direct result object.
-- Paginated lists return `{ "items": [...], "total": N, "page": N, "page_size": N }`.
+- Every dedicated list command returns `{ "items": [...], "total": N, "page": N, "page_size": N }`.
+- Unpaginated lists use `page: 1` and `page_size: len(items)`, including `page_size: 0` when empty.
+- The `observal api` escape hatch preserves raw endpoint JSON and is the only top-level-array exception.
 - Empty JSON results are still valid JSON. Do not return early with a human-only empty message before the JSON branch.
 - JSON mode must not emit prompts, spinners, banners, tables, or Rich markup.
 - Streams use JSON Lines, one object per line.

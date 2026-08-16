@@ -49,7 +49,7 @@ observal team show platform-tools --output json
 observal team claim-personal --output json
 ```
 
-`list` returns a direct array. The default includes teamspaces where the user is a member. `--all` requests all teamspaces visible to the caller. An empty array is successful.
+`list` returns the standard `items`, `total`, `page`, and `page_size` envelope. The default includes teamspaces where the user is a member. `--all` requests all teamspaces visible to the caller. Empty results use `items: []` and `page_size: 0`.
 
 `show` returns a combined result:
 
@@ -93,7 +93,7 @@ observal team visibility reject platform-tools \
   --output json
 ```
 
-The list returns a direct array. Approve and reject return the direct Team object. Approval makes the teamspace public and revokes its private invitation links. A rejection reason is optional and accepts up to 500 characters.
+The list returns the standard list envelope. Approve and reject return the direct Team object. Approval makes the teamspace public and revokes its private invitation links. A rejection reason is optional and accepts up to 500 characters.
 
 ## Delete and leave
 
@@ -125,7 +125,7 @@ observal team request mine platform-tools --output json
 observal team request withdraw platform-tools --yes --output json
 ```
 
-`request mine` returns a direct array ordered newest first. `request withdraw` finds the caller's pending request and marks it cancelled. Human mode prompts unless `--yes` is supplied. JSON mode requires `--yes` and returns an empty object.
+`request mine` returns the standard list envelope with requests ordered newest first. `request withdraw` finds the caller's pending request and marks it cancelled. Human mode prompts unless `--yes` is supplied. JSON mode requires `--yes` and returns an empty object.
 
 Owners and deployment admins can list and decide requests:
 
@@ -139,7 +139,7 @@ observal team request reject platform-tools bob@example.com \
 
 Valid status filters are `pending`, `approved`, `rejected`, and `cancelled`. Approve and reject select a pending request by exact email or case-insensitive username. A missing pending request uses not-found exit code 5.
 
-The list returns a direct array. Join, approve, and reject return the direct join-request object.
+The list returns the standard list envelope. Join, approve, and reject return the direct join-request object.
 
 ## Members
 
@@ -152,7 +152,7 @@ observal team members remove platform-tools @bob --yes --output json
 
 Roles are `member`, `reviewer`, and `owner`. Adding an existing member updates the role. The last owner cannot be removed.
 
-Member list returns a direct array. Add returns the saved member. Remove currently returns an empty object.
+Member list returns the standard list envelope. Add returns the saved member. Remove currently returns an empty object.
 
 Human remove prompts unless `--yes` is supplied. JSON remove requires `--yes`.
 
@@ -172,7 +172,7 @@ observal team invite list platform-tools --output json
 
 `--expires-days` accepts 1 through 365. `--max-uses` accepts 1 through 10,000 or may be omitted for no use limit. Invite names accept 1 through 100 characters.
 
-Create returns the direct invitation object, including the one-time token and URL. Treat both as secrets. List returns a direct array. States include active, expired, exhausted, and revoked.
+Create returns the direct invitation object, including the one-time token and URL. Treat both as secrets. List returns the standard list envelope. States include active, expired, exhausted, and revoked.
 
 A recipient can preview the token, then submit an owner-reviewed access request:
 
@@ -194,7 +194,7 @@ observal team invite requests \
   --output json
 ```
 
-The command returns a direct array of requests associated with that invitation. An empty array is successful.
+The command returns the standard list envelope for requests associated with that invitation. Empty results use `items: []`.
 
 Revoke an invitation while retaining its audit history:
 

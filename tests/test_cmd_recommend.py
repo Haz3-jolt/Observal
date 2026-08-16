@@ -122,14 +122,14 @@ class TestListing:
         assert "Nothing to recommend right now" in result.output
         assert "already installed or dismissed them all" in _flat(result.output)
 
-    def test_json_output_is_the_raw_payload(self, monkeypatch):
+    def test_json_output_adds_the_standard_list_envelope(self, monkeypatch):
         payload = {"items": [_item()], "personalized": True, "profile_sessions": 4, "topics": ["databases"]}
         _install(monkeypatch, payload)
 
         result = runner.invoke(recommend_app, ["--output", "json"])
 
         assert result.exit_code == 0, result.output
-        assert json.loads(result.output) == payload
+        assert json.loads(result.output) == {**payload, "total": 1, "page": 1, "page_size": 1}
 
     def test_list_subcommand_matches_the_bare_invocation(self, monkeypatch):
         payload = {"items": [_item()], "personalized": True, "profile_sessions": 4, "topics": []}

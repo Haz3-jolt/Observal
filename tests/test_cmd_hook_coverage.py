@@ -474,7 +474,7 @@ def test_list_filters_json_empty_rejects_plain_and_renders_table(monkeypatch):
     assert plain.exit_code == 2
     assert "Error" in plain.output
     assert "plain" in plain.output
-    assert json.loads(as_json.output) == [item]
+    assert json.loads(as_json.output) == {"items": [item], "total": 1, "page": 1, "page_size": 1}
     assert "No hooks found" in empty.output
     assert "Hooks (1)" in table.output
     assert "@alice" in table.output

@@ -132,6 +132,7 @@ Vite 6 SPA with TanStack Router, not Next.js. `web/AGENTS.md` is the authoritati
 
 ```
 observal
+├── api                      # authenticated JSON escape hatch for /api/v1 endpoints
 ├── scan                     # read-only discovery of what's installed
 ├── outdated                 # installed components with newer versions available
 ├── reconcile                # backfill sessions missed by automatic delivery
@@ -145,7 +146,8 @@ observal
 │   ├── sandbox              #   submit, list, show, edit, delete, co-authors
 │   ├── models               #   inspect registry-backed harness model data
 │   ├── version              #   component version commands
-│   └── recommend            #   components recommended from your own sessions
+│   ├── recommend            #   components recommended from your own sessions
+│   └── bulk                 #   mixed component submission from one JSON file
 ├── agent                    # create, bulk-create, list, my, show, install, archive,
 │                            # unarchive, delete, init, add, build, publish, release,
 │                            # versions, transfer-owner, co-authors

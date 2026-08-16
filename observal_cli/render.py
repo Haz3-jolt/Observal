@@ -135,7 +135,19 @@ def star_rating(n: int, max_stars: int = 5) -> str:
 # ── Output format dispatch ───────────────────────────────
 
 
-def output_json(data: Any) -> None:
+def list_envelope(items: list[Any]) -> dict[str, Any]:
+    """Return the universal JSON contract for an unpaginated list."""
+    return {"items": items, "total": len(items), "page": 1, "page_size": len(items)}
+
+
+def output_json(data: Any, *, raw: bool = False) -> None:
+    if isinstance(data, list) and not raw:
+        data = list_envelope(data)
+    elif isinstance(data, dict) and isinstance(data.get("items"), list) and not raw:
+        data = dict(data)
+        data.setdefault("total", len(data["items"]))
+        data.setdefault("page", 1)
+        data.setdefault("page_size", len(data["items"]))
     print(_json.dumps(data, default=str, ensure_ascii=False, indent=2))
 
 

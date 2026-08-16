@@ -4,7 +4,7 @@
 name: observal-admin
 command: observal
 description: "Administers Observal users, settings, diagnostics, review queues, security events, audit logs, SAML, SCIM, local server services, upgrades, rollback, and database migrations. Use when the user needs privileged governance, submission decisions, identity configuration, security investigation, or server operations."
-version: 2.1.0
+version: 2.2.0
 owner: observal
 ---
 
@@ -15,13 +15,14 @@ Core administration requires an admin role. Review actions also work for authori
 ## Execution contract
 
 1. Execute commands with a 60 second timeout, except documented long-running server and migration operations.
-2. **Use machine output by default:** add `--output json` whenever supported and parse the result.
+2. **Use machine output by default:** add `--output json` whenever supported. Parse list results from `items` and pagination fields.
 3. Run `--help` before acting when a path, role requirement, confirmation flag, or destination option is uncertain.
 4. Read current state before privileged mutations. Use the smallest required authority.
 5. Supply `--force` or another documented confirmation flag for noninteractive destructive operations.
 6. Verify review decisions, role changes, identity settings, server upgrades, rollback, and imports.
 7. Never repeat generated passwords, SCIM tokens, certificates, submitted headers, database URLs, environment values, or sensitive audit content.
 8. Fail openly. Do not bypass the CLI through direct database changes or hand-written migration SQL.
+9. Never blindly retry privileged mutations. Read resulting state after an uncertain failure.
 
 ## Choose the workflow
 

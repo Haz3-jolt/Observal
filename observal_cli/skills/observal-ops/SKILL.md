@@ -4,7 +4,7 @@
 name: observal-ops
 command: observal
 description: "Inspects Observal traces, sessions, rankings, feedback, telemetry health, logs, and Agent insight reports. Use when the user wants operational evidence, current activity, telemetry diagnosis, ratings, report generation, regression analysis, or recommendations grounded in Agent usage."
-version: 2.3.0
+version: 2.4.0
 owner: observal
 ---
 
@@ -13,12 +13,13 @@ owner: observal
 ## Execution contract
 
 1. Execute commands with a 60 second timeout. Use a longer timeout only for report generation or an intentional stream.
-2. **Use machine output by default:** add `--output json` whenever supported. Parse finite JSON and JSON Lines separately.
+2. **Use machine output by default:** add `--output json` whenever supported. Parse list envelopes, finite objects, and JSON Lines separately.
 3. Run `--help` before acting when a path or flag is uncertain.
 4. Start with the narrowest read that answers the question. Do not generate a new report when a completed report already suffices.
 5. Ground every conclusion in returned fields, report period, and sample size. Distinguish missing data from healthy data.
 6. Verify rating mutations and report generation results.
 7. Never repeat secrets or sensitive trace and log content unless the user explicitly requests the specific data and is authorized.
+8. After an uncertain rating or report-generation failure, read current state before retrying.
 
 ## Choose the workflow
 

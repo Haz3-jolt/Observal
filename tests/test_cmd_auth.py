@@ -1670,6 +1670,8 @@ def test_config_aliases_has_stable_json_shape(
     assert json.loads(result.output) == {
         "items": [{"alias": name, "target": target} for name, target in sorted(aliases.items())],
         "total": len(aliases),
+        "page": 1,
+        "page_size": len(aliases),
     }
 
 

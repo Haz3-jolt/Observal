@@ -64,7 +64,7 @@ def test_co_author_list_uses_real_api_path_and_json(component, collection, monke
     )
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.stdout)[0]["id"] == "user-id"
+    assert json.loads(result.stdout)["items"][0]["id"] == "user-id"
     get.assert_called_once_with(f"/api/v1/{collection}/resolved-id/co-authors")
     client.resolve_registry_reference.assert_called_once_with(collection, "acme/item")
 

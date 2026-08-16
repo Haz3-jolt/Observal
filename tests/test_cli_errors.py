@@ -503,7 +503,7 @@ def test_team_visibility_json_failure_uses_audited_context(monkeypatch):
 
 
 def test_all_cli_api_calls_have_custom_error_context():
-    methods = {"get", "get_text", "get_with_headers", "post", "put", "patch", "delete"}
+    methods = {"get", "get_text", "get_with_headers", "request_json", "post", "put", "patch", "delete"}
     missing = []
     cli_root = Path(__file__).resolve().parents[1] / "observal_cli"
     paths = [*cli_root.glob("cmd_*.py"), cli_root / "lockfile_reconcile.py"]
@@ -544,7 +544,7 @@ def test_root_group_enforces_error_contract_for_all_commands():
                 walk(child)
 
     walk(root)
-    assert len(executable) == 195
+    assert len(executable) == 197
 
 
 @pytest.mark.parametrize(
@@ -654,6 +654,20 @@ def test_transient_status_retries_once_then_succeeds(monkeypatch, isolated_clien
     assert all(item.kwargs["timeout"] == 19 for item in get.call_args_list)
     assert all(item.kwargs["params"] == {"page": 2} for item in get.call_args_list)
     isolated_client.sleep.assert_called_once_with(0.5)
+
+
+@pytest.mark.parametrize("method", ["post", "put", "patch", "delete"])
+def test_mutations_never_retry_transient_responses(monkeypatch, isolated_client, method):
+    response = _response(503, data={"detail": "unknown mutation state"})
+    request = MagicMock(return_value=response)
+    monkeypatch.setattr(client.config, "get_timeout", lambda: 19)
+    monkeypatch.setattr(client.httpx, method, request)
+
+    with pytest.raises(httpx.HTTPStatusError):
+        client._request_with_retry(method, "https://registry.example.test/api/v1/items", {})
+
+    request.assert_called_once()
+    isolated_client.sleep.assert_not_called()
 
 
 def test_retry_honors_header_and_stops_after_three_attempts(monkeypatch, isolated_client):
@@ -859,6 +873,31 @@ def test_get_with_headers_normalizes_pagination_headers(monkeypatch):
         "https://registry.example.test/api/v1/items",
         {"Authorization": "Bearer fake-access-token"},
         params={"page": 2},
+    )
+
+
+def test_request_json_forwards_method_query_and_body(monkeypatch):
+    response = _response(200, data=[{"id": "one"}])
+    request = MagicMock(return_value=response)
+    monkeypatch.setattr(client, "_client", lambda: ("https://registry.example.test", {}))
+    monkeypatch.setattr(client, "_request_with_retry", request)
+
+    result = client.request_json(
+        "PATCH",
+        "/api/v1/items/id",
+        params={"notify": "true"},
+        json_data={"name": "updated"},
+        operation="Call Observal API",
+        resource="API endpoint",
+    )
+
+    assert result == [{"id": "one"}]
+    request.assert_called_once_with(
+        "patch",
+        "https://registry.example.test/api/v1/items/id",
+        {},
+        params={"notify": "true"},
+        json={"name": "updated"},
     )
 
 

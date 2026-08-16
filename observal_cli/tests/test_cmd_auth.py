@@ -588,7 +588,7 @@ class TestConfigContracts:
             result = runner.invoke(app, ["config", "aliases", "--output", "json"])
 
         assert result.exit_code == 0, result.output
-        assert json.loads(result.stdout) == {"items": [], "total": 0}
+        assert json.loads(result.stdout) == {"items": [], "total": 0, "page": 1, "page_size": 0}
 
 
 # ── post-login harness detection ───────────────────────────────

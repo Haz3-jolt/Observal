@@ -29,6 +29,8 @@
 ## CLI Reference
 
 * [Overview](cli/README.md)
+* [observal api](cli/api.md)
+* [Mutation retries and idempotency](cli/idempotency.md)
 * [observal auth](cli/auth.md)
 * [observal config](cli/config.md)
 * [observal scan](cli/scan.md)

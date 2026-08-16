@@ -5,7 +5,7 @@
 name: observal-advanced
 command: observal
 description: "Recovers Observal session ingestion, manages CLI upgrades, downgrades and rollback, and performs explicit local Agent fallback when the server is unavailable. Use when the user asks to reconcile missed sessions, repair CLI version state, or continue locally after a confirmed connection or configuration failure."
-version: 2.1.0
+version: 2.2.0
 owner: observal
 ---
 
@@ -14,12 +14,13 @@ owner: observal
 ## Execution contract
 
 1. Execute commands with a 60 second timeout unless the operation documents a longer wait.
-2. **Use machine output by default:** add `--output json` whenever supported and parse the result.
+2. **Use machine output by default:** add `--output json` whenever supported. Parse list results from `items` and pagination fields.
 3. Run `--help` before acting when a path or flag is uncertain.
 4. Use dry run before reconciliation when scope or session volume is uncertain.
 5. Supply documented force flags so version operations never prompt.
 6. Verify cursor, outbox, installed version, checksum, and rollback state after recovery operations.
 7. Fail openly. Never hide an unavailable server behind automatic local writes.
+8. Never retry reconciliation, version changes, or fallback writes without checking resulting state.
 
 Read [Recovery workflows](references/recovery-workflows.md) completely before executing.
 

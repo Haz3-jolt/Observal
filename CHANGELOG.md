@@ -60,6 +60,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Features
+
+- add an authenticated JSON API escape hatch and mixed Registry component bulk submission
+- standardize dedicated list JSON output with `items`, `total`, `page`, and `page_size`
+- make mutation retry behavior explicit and reserve automatic transient retries for reads
+
+### Breaking changes
+
+- dedicated list commands that previously returned top-level arrays now return the standard list envelope
+
 ### Security
 
 - add JWT algorithm agility, file-backed credentials, secure package bindings, signed release tags, verification guidance, and a security assurance case

@@ -628,7 +628,12 @@ def test_list_json_filters_sorts_limits_and_caches(monkeypatch):
 
     assert result.exit_code == 0, result.output
     rendered = json.loads(result.output)
-    assert [item["name"] for item in rendered] == ["Alpha"]
+    assert [item["name"] for item in rendered["items"]] == ["Alpha"]
+    assert {key: rendered[key] for key in ("total", "page", "page_size")} == {
+        "total": 1,
+        "page": 1,
+        "page_size": 1,
+    }
     get.assert_called_once_with(
         "/api/v1/mcps",
         params={
@@ -693,7 +698,7 @@ def test_my_mcp_outputs_reject_plain_and_empty_state(monkeypatch):
     assert "Error" in plain.output
     assert "plain" in plain.output
     assert "You have no MCP servers" in empty.output
-    assert json.loads(as_json.output)[0]["id"] == "mcp-1"
+    assert json.loads(as_json.output)["items"][0]["id"] == "mcp-1"
     assert "My MCPs" in table.output
     assert save.call_count == 3
 

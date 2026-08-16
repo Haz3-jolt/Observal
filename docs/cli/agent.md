@@ -110,7 +110,7 @@ observal agent show alice/reviewer --output json
 
 The most recent `list` or `my` result is cached for row-number references. Empty results clear stale Agent rows. `--interactive` is human-only and cannot be combined with JSON.
 
-`my` returns a direct array, including pending, approved, rejected, and archived agents. An empty array is successful.
+`my` returns the standard `items`, `total`, `page`, and `page_size` envelope, including pending, approved, rejected, and archived agents. Empty results use `items: []`.
 
 `show` returns the direct Agent object, including component links and success criteria.
 
@@ -230,7 +230,7 @@ observal agent co-authors add alice/reviewer @dev --output json
 observal agent co-authors remove alice/reviewer 550e8400-e29b-41d4-a716-446655440000 --output json
 ```
 
-List returns a direct array. Add returns the added user. Remove requires the user UUID returned by list and returns the direct deletion result.
+List returns the standard list envelope. Add returns the added user. Remove requires the user UUID returned by list and returns the direct deletion result.
 
 ## Pull
 

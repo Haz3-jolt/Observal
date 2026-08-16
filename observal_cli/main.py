@@ -167,8 +167,10 @@ def _try_lockfile_migration() -> None:
 # ── Register command groups ──────────────────────────────
 
 from observal_cli.cmd_agent import agent_app
+from observal_cli.cmd_api import register_api
 from observal_cli.cmd_archive import add_archive_commands
 from observal_cli.cmd_auth import auth_app, register_config
+from observal_cli.cmd_bulk import bulk_app
 from observal_cli.cmd_co_authors import make_co_authors_typer
 from observal_cli.cmd_component import version_app
 from observal_cli.cmd_doctor import doctor_app
@@ -219,6 +221,7 @@ registry_app.add_typer(sandbox_app, name="sandbox")
 registry_app.add_typer(models_app, name="models")
 registry_app.add_typer(version_app, name="version")
 registry_app.add_typer(recommend_app, name="recommend")
+registry_app.add_typer(bulk_app, name="bulk")
 
 # ── Co-authors and ownership sub-commands ─────────────────
 mcp_app.add_typer(make_co_authors_typer("mcps"), name="co-authors")
@@ -244,6 +247,7 @@ app.add_typer(auth_app, name="auth")
 
 # ── Primary user workflows (root) ─────────────────────────
 register_config(app)
+register_api(app)
 register_scan(app)
 register_outdated(app)
 

@@ -11,6 +11,7 @@ Every command available in the installed CLI. This block is generated from the T
 
 **Root commands**
 
+- `observal api`: Call an authenticated Observal JSON API endpoint.
 - `observal outdated`: Show installed agents and standalone components with their registry status.
 - `observal reconcile`: Backfill local session records missed by automatic hook delivery
 - `observal scan`: Show a read-only inventory of your local harness setup.
@@ -122,6 +123,8 @@ Every command available in the installed CLI. This block is generated from the T
 
 **`observal registry`**: Component registry (MCPs, skills, hooks, prompts, sandboxes)
 
+- `observal registry bulk`: Submit mixed Registry components from one JSON file.
+  - `observal registry bulk submit`: Submit mixed MCP, skill, hook, prompt, and sandbox entries.
 - `observal registry hook`: Hook registry commands
   - `observal registry hook co-authors`: Manage co-authors for hooks
     - `observal registry hook co-authors add`: Add a co-author.

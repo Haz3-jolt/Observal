@@ -1281,8 +1281,9 @@ def test_new_team_commands_emit_parseable_json(monkeypatch):
     post.return_value = claimed
     invoke(["claim-personal"], claimed)
 
+    empty_list = {"items": [], "total": 0, "page": 1, "page_size": 0}
     get.return_value = []
-    invoke(["visibility", "list-requests"], [])
+    invoke(["visibility", "list-requests"], empty_list)
 
     approved = {"id": TEAM_ID, "visibility": "public", "visibility_request_status": "approved"}
     post.return_value = approved
@@ -1305,8 +1306,8 @@ def test_new_team_commands_emit_parseable_json(monkeypatch):
     invoke(["invite", "delete", "platform-tools", INVITE_ID, "--yes"], {})
 
     get.return_value = []
-    invoke(["invite", "requests", "platform-tools", INVITE_ID], [])
-    invoke(["request", "mine", "platform-tools"], [])
+    invoke(["invite", "requests", "platform-tools", INVITE_ID], empty_list)
+    invoke(["request", "mine", "platform-tools"], empty_list)
 
     get.return_value = [pending]
     invoke(["request", "withdraw", "platform-tools", "--yes"], {})

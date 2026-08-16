@@ -4,8 +4,8 @@
 # SPDX-License-Identifier: Apache-2.0
 name: observal
 command: observal
-description: "Operates the Observal CLI for authentication, configuration, setup diagnosis, teamspaces, inbox work, scans, and update checks. Use when the user wants to log in, configure Observal, inspect local harness setup, manage a teamspace or invitation, process inbox items, or check installed registry items."
-version: 2.6.0
+description: "Operates the Observal CLI for authentication, configuration, setup diagnosis, teamspaces, inbox work, scans, update checks, and authenticated API access. Use when the user wants to log in, configure Observal, inspect local harness setup, manage a teamspace or invitation, process inbox items, check installed registry items, or call an endpoint without a dedicated command."
+version: 2.7.0
 owner: observal
 ---
 
@@ -17,13 +17,14 @@ Use this skill for core account, setup, local inventory, inbox, and teamspace wo
 
 1. Execute commands in the shell. Do not merely print commands for the user to run.
 2. Set a 60 second timeout for normal CLI calls. Increase it only for an operation documented as long-running.
-3. **Use machine output by default:** add `--output json` whenever supported. Parse stdout as JSON. Streaming commands emit JSON Lines.
+3. **Use machine output by default:** add `--output json` whenever supported. Dedicated lists return `items`, `total`, `page`, and `page_size`; streams emit JSON Lines.
 4. Run the relevant `--help` command before acting when a path or flag is uncertain. Never invent flags.
 5. Supply every required input and confirmation flag so agent workflows never wait for a prompt.
 6. Reuse returned UUIDs and `qualified_name` values. Never scrape table rows or assume a bare name is unique.
 7. After a mutation, verify the returned state or run the smallest read command that confirms the requested change.
 8. Treat tokens, invitation URLs, credentials, generated passwords, headers, and environment values as secrets. Do not echo them.
 9. Fail openly. Do not silently switch to direct API calls, database access, or local file writes.
+10. Automatic transient retries apply only to reads. After an uncertain mutation failure, verify state before retrying.
 
 ## Route the task
 
@@ -31,7 +32,7 @@ Use this skill for core account, setup, local inventory, inbox, and teamspace wo
 | --- | --- |
 | Login, account, CLI config, scan, doctor, outdated, inbox | [Core workflows](references/core-workflows.md) |
 | Teamspaces, visibility review, members, requests, invitations | [Teamspace workflows](references/teamspaces.md) |
-| Exact command inventory | [Generated command reference](references/commands.md) |
+| Exact command inventory or authenticated API escape hatch | [Generated command reference](references/commands.md) |
 | Create, edit, release, or pull an Agent | Use `observal-agents` |
 | Search, submit, install, or version a component | Use `observal-registry` |
 | Traces, telemetry, logs, ratings, or insight reports | Use `observal-ops` |

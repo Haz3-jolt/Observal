@@ -6,6 +6,7 @@
 ## Contents
 
 - Common workflow
+- Mixed bulk submission
 - MCP server
 - Skill
 - Hook
@@ -22,6 +23,17 @@ Submit only content the user owns or is authorized to publish. Use `--team TEAM_
 3. Submit in JSON mode.
 4. Capture UUID, `qualified_name`, version, and status.
 5. Verify with `show` or the owner's list. Pending is not approved.
+
+## Mixed bulk submission
+
+Use one typed JSON file for up to 200 mixed components. Dry run performs local structural validation. Execution requires confirmation in JSON mode.
+
+```bash
+observal registry bulk submit --from-file components.json --dry-run --output json
+observal registry bulk submit --from-file components.json --yes --output json
+```
+
+Each entry contains `type` plus the normal API submission fields. Supported types are `mcp`, `skill`, `hook`, `prompt`, and `sandbox`. Inspect `submitted`, `skipped`, `errors`, and every result. Authentication and service failures stop the batch. After an uncertain failure, verify by UUID or `qualified_name` before rerunning.
 
 ## MCP server
 
