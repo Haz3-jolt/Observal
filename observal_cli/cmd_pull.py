@@ -32,7 +32,7 @@ from observal_cli import client, config
 from observal_cli.constants import VALID_HARNESSES
 from observal_cli.errors import ErrorCategory, fail
 from observal_cli.harness import ensure_loaded, get_adapter
-from observal_cli.prompts import select_one, text_input
+from observal_cli.prompts import password_input, select_one
 from observal_cli.render import OutputMode, esc, output_json, spinner
 from observal_shared.harness_registry import get_scope_aware_harnesses
 
@@ -169,7 +169,7 @@ def _collect_mcp_env_vars(
                         rprint(f"  [green]\u2713[/green] {esc(ev['name'])} [dim](from --env)[/dim]")
                     else:
                         desc = f" [dim]({esc(ev['description'])})[/dim]" if ev.get("description") else ""
-                        val = text_input(f"  {esc(ev['name'])}{desc}")
+                        val = password_input(f"  {esc(ev['name'])}{desc}")
                         mcp_env[ev["name"]] = val
 
             if optional:
@@ -180,7 +180,7 @@ def _collect_mcp_env_vars(
                         rprint(f"  [green]\u2713[/green] {esc(ev['name'])} [dim](from --env)[/dim]")
                     else:
                         desc = f" [dim]({esc(ev['description'])})[/dim]" if ev.get("description") else ""
-                        val = text_input(f"  {esc(ev['name'])}{desc} (press Enter to skip)", default="")
+                        val = password_input(f"  {esc(ev['name'])}{desc} (press Enter to skip)")
                         if val:
                             mcp_env[ev["name"]] = val
 
@@ -242,7 +242,7 @@ def _collect_mcp_headers(
                         rprint(f"  [green]\u2713[/green] {esc(h['name'])} [dim](from --header)[/dim]")
                     else:
                         desc = f" [dim]({esc(h['description'])})[/dim]" if h.get("description") else ""
-                        val = text_input(f"  {esc(h['name'])}{desc}")
+                        val = password_input(f"  {esc(h['name'])}{desc}")
                         mcp_hdrs[h["name"]] = val
 
             if optional:
@@ -253,7 +253,7 @@ def _collect_mcp_headers(
                         rprint(f"  [green]\u2713[/green] {esc(h['name'])} [dim](from --header)[/dim]")
                     else:
                         desc = f" [dim]({esc(h['description'])})[/dim]" if h.get("description") else ""
-                        val = text_input(f"  {esc(h['name'])}{desc} (press Enter to skip)", default="")
+                        val = password_input(f"  {esc(h['name'])}{desc} (press Enter to skip)")
                         if val:
                             mcp_hdrs[h["name"]] = val
 
@@ -761,10 +761,10 @@ def register_pull(app: typer.Typer):
         ),
         no_prompt: bool = typer.Option(False, "--no-prompt", "-y", help="Skip interactive prompts"),
         env: list[str] | None = typer.Option(
-            None, "--env", "-e", help="MCP environment variable (KEY=VALUE, repeatable)"
+            None, "--env", "-e", help="Non-secret MCP environment setting (KEY=VALUE, repeatable)"
         ),
         header: list[str] | None = typer.Option(
-            None, "--header", "-H", help="MCP header value (Header-Name=value, repeatable)"
+            None, "--header", "-H", help="Non-secret MCP header setting (Header-Name=value, repeatable)"
         ),
         version: str | None = typer.Option(
             None, "--version", "-V", help="Install a specific version (e.g. '1.2.0'). Defaults to latest."
@@ -777,10 +777,10 @@ def register_pull(app: typer.Typer):
         then writes rules files, MCP configs, and agent files into the target
         directory.  Use --dry-run to preview without writing.
 
-        Use --env KEY=VALUE to pass MCP environment variables non-interactively
-        (repeatable). Use --header Header-Name=value to pass MCP auth headers
-        non-interactively (repeatable). When --no-prompt is set, env var and
-        header prompts are skipped and only values from flags are used.
+        Use --env KEY=VALUE and --header Header-Name=value only for non-secret
+        settings because command arguments are visible to other processes. For
+        credentials, omit --no-prompt and enter values interactively. When
+        --no-prompt is set, prompts are skipped and only flag values are used.
 
         Examples:
           observal agent pull my-agent --harness claude-code --no-prompt
@@ -793,7 +793,7 @@ def register_pull(app: typer.Typer):
                 "JSON mode cannot prompt for installation values.",
                 operation="Pull agent",
                 resource="agent installation",
-                remediation="Add --no-prompt and provide required --env or --header values.",
+                remediation="Add --no-prompt only when no secret values are required; otherwise use interactive table mode.",
             )
         harness, scope, version = _validate_pull_inputs(harness, scope, version)
         env_overrides = _parse_assignments(env, "environment variable")

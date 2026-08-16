@@ -3,17 +3,16 @@
 
 """Static validation for the bundled Observal skill.
 
-These tests exercise ``observal_cli/skills/observal/SKILL.md`` without invoking
-an LLM. They guarantee:
+These tests exercise every bundled Observal skill without invoking an LLM.
+They guarantee:
 
-- The file exists at the path the installer expects.
+- Skill trees exist at the paths the installer expects.
 - Frontmatter contains the fields harness skill loaders rely on.
-- Every fenced ``observal …`` shell command in the skill resolves to a real
-  Typer command path.
-- Every long flag mentioned for a documented command is a real flag on that
-  command.
-- The auto-generated reference block exists between the expected sentinels.
-- The file stays under a sane size budget so it does not blow up LLM context.
+- Progressive-disclosure links resolve to bundled reference files.
+- Every fenced ``observal …`` command in skills and references resolves to a
+  real Typer command path with valid long flags.
+- The auto-generated command reference remains synchronized.
+- Critical agent behavior learned from real usage remains explicit.
 
 If any of these regress, run::
 
@@ -48,10 +47,10 @@ ALL_SKILL_PATHS = [
     SKILLS_DIR / "observal-admin" / "SKILL.md",
     SKILLS_DIR / "observal-advanced" / "SKILL.md",
 ]
+ALL_SKILL_MARKDOWN_PATHS = sorted(path for skill_path in ALL_SKILL_PATHS for path in skill_path.parent.rglob("*.md"))
 
 REQUIRED_FRONTMATTER_FIELDS = ("name", "description", "version")
 EXPECTED_COMMAND = "observal"
-EXPECTED_NAME = "observal"
 
 BEGIN_SENTINEL = "<!-- BEGIN AUTO-GENERATED COMMAND REFERENCE -->"
 END_SENTINEL = "<!-- END AUTO-GENERATED COMMAND REFERENCE -->"
@@ -64,8 +63,9 @@ _PLACEHOLDER_TOKENS = {"<", ">", "..."}
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 
-def _read_skill() -> str:
-    return SKILL_PATH.read_text(encoding="utf-8")
+def _markdown_body(path: Path) -> str:
+    text = path.read_text(encoding="utf-8")
+    return _split_frontmatter(text)[1] if path.name == "SKILL.md" else text
 
 
 def _split_frontmatter(text: str) -> tuple[dict, str]:
@@ -283,7 +283,7 @@ class TestSkillFile:
         """The auto-generated command reference must exist."""
         assert REFERENCE_PATH.exists(), f"{REFERENCE_PATH} is missing"
 
-    def test_installer_preserves_core_skill_references(self, tmp_path, monkeypatch):
+    def test_installer_preserves_all_skill_references(self, tmp_path, monkeypatch):
         from observal_cli import skill_installer
         from observal_shared import harness_registry
 
@@ -303,51 +303,128 @@ class TestSkillFile:
 
         skill_installer.install_observal_skill()
 
-        installed = tmp_path / ".pi/agent/skills/observal"
-        assert (installed / "SKILL.md").is_file()
-        reference = installed / "references/commands.md"
-        assert reference.is_file()
+        for skill_path in ALL_SKILL_PATHS:
+            source_dir = skill_path.parent
+            installed_dir = tmp_path / ".pi/agent/skills" / source_dir.name
+            for source in source_dir.rglob("*"):
+                if source.is_file():
+                    target = installed_dir / source.relative_to(source_dir)
+                    assert target.read_bytes() == source.read_bytes()
 
+        installed_core = tmp_path / ".pi/agent/skills/observal"
+        reference = installed_core / "references/commands.md"
         reference.unlink()
-        reference.parent.rmdir()
-        (installed / "SKILL.md").write_text("stale", encoding="utf-8")
+        (installed_core / "SKILL.md").write_text("stale", encoding="utf-8")
         skill_installer.repair_observal_skill_layout()
 
-        assert reference.is_file()
-        assert (installed / "SKILL.md").read_text(encoding="utf-8") == SKILL_PATH.read_text(encoding="utf-8")
+        assert reference.read_bytes() == REFERENCE_PATH.read_bytes()
+        assert (installed_core / "SKILL.md").read_bytes() == SKILL_PATH.read_bytes()
 
     def test_single_file_harness_install_preserves_references(self, tmp_path):
         from observal_cli import skill_installer
 
+        source_dir = SKILLS_DIR / "observal"
         destination = tmp_path / "skills/observal.md"
-        skill_installer._copy_skill(SKILLS_DIR / "observal", destination)
+        skill_installer._copy_skill(source_dir, destination)
 
         assert destination.is_file()
-        assert (destination.parent / "references/commands.md").is_file()
+        for source in source_dir.rglob("*.md"):
+            if source.name != "SKILL.md":
+                target = destination.parent / source.relative_to(source_dir)
+                assert target.read_bytes() == source.read_bytes()
 
 
 class TestFrontmatter:
-    def setup_method(self):
-        self.frontmatter, self.body = _split_frontmatter(_read_skill())
+    def test_all_frontmatter_is_valid(self):
+        for path in ALL_SKILL_PATHS:
+            frontmatter, _body = _split_frontmatter(path.read_text(encoding="utf-8"))
+            for field in REQUIRED_FRONTMATTER_FIELDS:
+                assert frontmatter.get(field), f"{path}: frontmatter field {field!r} is missing"
+            name = frontmatter["name"]
+            description = frontmatter["description"]
+            assert name == path.parent.name
+            assert len(name) <= 64
+            assert re.fullmatch(r"[a-z0-9-]+", name)
+            assert frontmatter.get("command") in {None, EXPECTED_COMMAND}
+            assert len(description) <= 1024
+            assert "Use when" in description
+            assert not description.startswith(("I ", "You "))
+            assert "<" not in description and ">" not in description
+            version = str(frontmatter["version"])
+            assert re.fullmatch(r"\d+\.\d+\.\d+(?:[-+].*)?", version), (
+                f"{path}: version should look like semver, got {version!r}"
+            )
 
-    def test_required_fields_present(self):
-        for field in REQUIRED_FRONTMATTER_FIELDS:
-            assert field in self.frontmatter, f"frontmatter missing required field: {field}"
-            assert self.frontmatter[field], f"frontmatter field {field!r} is empty"
 
-    def test_name_matches_skill_directory(self):
-        assert self.frontmatter["name"] == EXPECTED_NAME, (
-            f"frontmatter name should be {EXPECTED_NAME!r} so harness loaders find it"
-        )
+class TestProgressiveDisclosure:
+    def test_every_skill_links_to_existing_direct_references(self):
+        for skill_path in ALL_SKILL_PATHS:
+            body = _markdown_body(skill_path)
+            links = re.findall(r"\[[^]]+\]\(([^)]+\.md(?:#[^)]+)?)\)", body)
+            assert links, f"{skill_path} has no progressive-disclosure references"
+            for link in links:
+                relative = link.split("#", 1)[0]
+                target = (skill_path.parent / relative).resolve()
+                assert target.is_file(), f"{skill_path}: broken reference {link!r}"
+                assert target.parent == skill_path.parent / "references"
 
-    def test_command_field_present_when_set(self):
-        # ``command`` is optional but if present must point at the CLI binary.
-        if "command" in self.frontmatter:
-            assert self.frontmatter["command"] == EXPECTED_COMMAND
+    def test_long_references_have_contents(self):
+        for path in ALL_SKILL_MARKDOWN_PATHS:
+            if path.name in {"SKILL.md", "commands.md"}:
+                continue
+            text = path.read_text(encoding="utf-8")
+            if len(text.splitlines()) > 100:
+                assert "## Contents" in text, f"{path} needs a table of contents"
 
-    def test_version_is_semverish(self):
-        version = str(self.frontmatter["version"])
-        assert re.fullmatch(r"\d+\.\d+\.\d+(?:[-+].*)?", version), f"version should look like semver, got {version!r}"
+    def test_references_do_not_chain_to_more_references(self):
+        for path in ALL_SKILL_MARKDOWN_PATHS:
+            if path.name in {"SKILL.md", "commands.md"}:
+                continue
+            links = re.findall(r"\[[^]]+\]\(([^)]+\.md(?:#[^)]+)?)\)", path.read_text(encoding="utf-8"))
+            assert links == [], f"{path} contains a nested reference: {links}"
+
+
+class TestAgentBehaviorContracts:
+    def test_every_skill_executes_json_and_verifies(self):
+        for path in ALL_SKILL_PATHS:
+            text = path.read_text(encoding="utf-8")
+            assert "Execute commands" in text
+            assert "Use machine output by default" in text
+            assert "verify" in text.lower()
+            assert "--help" in text
+
+    def test_team_visibility_pending_state_is_explicit(self):
+        text = (SKILLS_DIR / "observal/references/teamspaces.md").read_text(encoding="utf-8")
+        assert "visibility_request_status: pending" in text
+        assert "team visibility approve" in text
+
+    def test_automation_uses_canonical_identifiers(self):
+        for skill in ("observal-agents", "observal-registry"):
+            text = (SKILLS_DIR / skill / "SKILL.md").read_text(encoding="utf-8")
+            assert "qualified_name" in text
+            assert "Never automate with row numbers" in text
+
+    def test_insight_reuse_requires_validated_component_reference(self):
+        text = (SKILLS_DIR / "observal-ops/references/insight-reports.md").read_text(encoding="utf-8")
+        assert "only when it contains a validated `component_ref`" in text
+        assert "do not invent a matching identity" in text
+
+    def test_admin_reviews_use_uuids_and_redact_secrets(self):
+        text = (SKILLS_DIR / "observal-admin/references/governance-and-identity.md").read_text(encoding="utf-8")
+        assert "List and select by UUID" in text
+        assert "Treat the entire response as secret" in text
+
+    def test_local_fallback_requires_an_explicit_failure(self):
+        text = (SKILLS_DIR / "observal-advanced/references/recovery-workflows.md").read_text(encoding="utf-8")
+        assert "`Connection failed` or `Not configured`" in text
+        assert "user confirms" in text
+        assert '"tools":["read"]' in text
+        assert 'tools` to `["*"]` only after separate confirmation' in text
+
+    def test_pull_secrets_are_not_documented_as_command_arguments(self):
+        text = (SKILLS_DIR / "observal-agents/references/agent-workflows.md").read_text(encoding="utf-8")
+        assert "expose values in shell history and process arguments" in text
+        assert "enter values through the interactive prompts" in text
 
 
 class TestAutoGenBlock:
@@ -376,11 +453,9 @@ class TestAutoGenBlock:
 
 class TestCommandResolution:
     def setup_method(self):
-        # Collect commands from ALL skill files.
         self.commands: list[ParsedCommand] = []
-        for path in ALL_SKILL_PATHS:
-            _, body = _split_frontmatter(path.read_text(encoding="utf-8"))
-            self.commands.extend(_parse_observal_invocations(body))
+        for path in ALL_SKILL_MARKDOWN_PATHS:
+            self.commands.extend(_parse_observal_invocations(_markdown_body(path)))
         self.valid_paths = _all_command_paths()
 
     def test_at_least_one_command_documented(self):
@@ -408,13 +483,12 @@ class TestCommandResolution:
 
 
 class TestFlagResolution:
-    """Every long flag mentioned in any skill must exist on its command."""
+    """Every long flag mentioned in any skill or reference must exist."""
 
     def setup_method(self):
         self.commands: list[ParsedCommand] = []
-        for path in ALL_SKILL_PATHS:
-            _, body = _split_frontmatter(path.read_text(encoding="utf-8"))
-            self.commands.extend(_parse_observal_invocations(body))
+        for path in ALL_SKILL_MARKDOWN_PATHS:
+            self.commands.extend(_parse_observal_invocations(_markdown_body(path)))
 
     def test_documented_flags_exist(self):
         bad: list[str] = []

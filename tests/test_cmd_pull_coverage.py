@@ -246,7 +246,7 @@ def test_collect_mcp_env_vars_prompts_and_deduplicates(
 
     prompt = MagicMock(side_effect=["", "optional-value", "typed-secret"])
     monkeypatch.setattr(cmd_pull.client, "get", get)
-    monkeypatch.setattr(cmd_pull, "text_input", prompt)
+    monkeypatch.setattr(cmd_pull, "password_input", prompt)
 
     values = cmd_pull._collect_mcp_env_vars(
         detail,
@@ -258,8 +258,8 @@ def test_collect_mcp_env_vars_prompts_and_deduplicates(
         "mcp-2": {"ASK": "typed-secret", "REGION": "eu-west-1"},
     }
     assert prompt.call_args_list == [
-        call("  EMPTY [dim](optional)[/dim] (press Enter to skip)", default=""),
-        call("  FILLED (press Enter to skip)", default=""),
+        call("  EMPTY [dim](optional)[/dim] (press Enter to skip)"),
+        call("  FILLED (press Enter to skip)"),
         call("  ASK"),
     ]
     output = capsys.readouterr().out
@@ -281,7 +281,7 @@ def test_collect_mcp_env_vars_no_prompt_uses_only_known_overrides(monkeypatch: p
         },
     )
     prompt = MagicMock(side_effect=AssertionError("prompted in no-prompt mode"))
-    monkeypatch.setattr(cmd_pull, "text_input", prompt)
+    monkeypatch.setattr(cmd_pull, "password_input", prompt)
 
     assert cmd_pull._collect_mcp_env_vars(
         detail,
@@ -325,7 +325,7 @@ def test_collect_mcp_headers_prompts_and_deduplicates(
 
     prompt = MagicMock(side_effect=["", "optional-value", "required-value"])
     monkeypatch.setattr(cmd_pull.client, "get", get)
-    monkeypatch.setattr(cmd_pull, "text_input", prompt)
+    monkeypatch.setattr(cmd_pull, "password_input", prompt)
 
     values = cmd_pull._collect_mcp_headers(
         detail,
@@ -337,8 +337,8 @@ def test_collect_mcp_headers_prompts_and_deduplicates(
         "mcp-2": {"X-Required": "required-value", "X-Region": "eu"},
     }
     assert prompt.call_args_list == [
-        call("  X-Skip [dim](optional)[/dim] (press Enter to skip)", default=""),
-        call("  X-Filled (press Enter to skip)", default=""),
+        call("  X-Skip [dim](optional)[/dim] (press Enter to skip)"),
+        call("  X-Filled (press Enter to skip)"),
         call("  X-Required"),
     ]
     output = capsys.readouterr().out
@@ -355,7 +355,7 @@ def test_collect_mcp_headers_no_prompt_uses_only_known_overrides(monkeypatch: py
         lambda _path: {"headers": [{"name": "Required"}, {"name": "Optional", "required": False}]},
     )
     prompt = MagicMock(side_effect=AssertionError("prompted in no-prompt mode"))
-    monkeypatch.setattr(cmd_pull, "text_input", prompt)
+    monkeypatch.setattr(cmd_pull, "password_input", prompt)
 
     assert cmd_pull._collect_mcp_headers(
         detail,
