@@ -72,6 +72,7 @@ All notable changes to this project will be documented in this file.
 
 ### Security
 
+- remove shell command construction from Kiro end-to-end tests
 - add JWT algorithm agility, file-backed credentials, secure package bindings, signed release tags, verification guidance, and a security assurance case
 
 ### Fixes
