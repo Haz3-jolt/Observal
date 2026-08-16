@@ -28,7 +28,9 @@ Login accepts `server`, `email`, `password`, `name`, `sso`, `saml`, `output`, an
 
 Human login always asks for the server URL unless `--server` is supplied; leave the prompt blank to use `http://localhost`. On a fresh server, provide email, name, and a password to create the first administrator. JSON mode never prompts, uses the configured server or local default, and requires complete credential inputs.
 
-Successful human login installs the bundled skills, creates the initial layer snapshot, and runs doctor. Select `no-setup` to authenticate without those side effects. JSON mode always skips setup.
+Successful human login synchronizes the bundled skills, creates the initial layer snapshot, and runs doctor. Select `no-setup` to skip the snapshot and doctor. JSON mode skips those post-login steps.
+
+Every CLI invocation also computes a SHA-256 hash for each installed Observal-managed skill tree. A mismatched tree is replaced completely from the packaged bundle, including references and scripts, so local edits and stale extra files do not survive. Skill directories outside the six bundled Observal names are untouched.
 
 Credential JSON login emits one safe object and never includes tokens or passwords:
 

@@ -130,21 +130,28 @@ def _migrate_legacy_mcp_configs() -> None:
             rprint(f"  [dim]{path}[/dim]")
 
 
-def _try_bundled_skill_migration() -> None:
-    """Repair skill trees written by older CLI versions."""
+def _sync_bundled_skills() -> None:
+    """Hash-check and synchronize bundled skills before every command."""
     try:
-        from observal_cli.skill_installer import repair_observal_skill_layout
+        from observal_cli.skill_installer import sync_observal_skills
 
-        repair_observal_skill_layout()
+        sync_observal_skills()
     except OSError as error:
-        from loguru import logger as optic
+        from observal_cli.errors import ErrorCategory, fail
 
-        optic.warning("bundled skill layout repair failed: {}", error)
+        fail(
+            ErrorCategory.PERMISSION if isinstance(error, PermissionError) else ErrorCategory.UNEXPECTED,
+            "Bundled Observal skills could not be synchronized.",
+            operation="Synchronize bundled skills",
+            resource="installed Observal skills",
+            remediation="Reinstall the CLI or check harness skill-directory permissions, then retry.",
+            detail=repr(error),
+        )
 
 
 def _try_lockfile_migration() -> None:
-    """Repair bundled skills, then migrate legacy agent markers when needed."""
-    _try_bundled_skill_migration()
+    """Synchronize bundled skills, then migrate legacy agent markers when needed."""
+    _sync_bundled_skills()
     try:
         from observal_cli.lockfile import CONFIG_DIR, LOCKFILE_PATH, migrate_agent_markers
 

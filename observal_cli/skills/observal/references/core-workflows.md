@@ -34,6 +34,8 @@ OBSERVAL_CURRENT_PASSWORD_FILE=/path/to/current OBSERVAL_NEW_PASSWORD_FILE=/path
 
 Fresh-server JSON bootstrap can require `--name`. SSO JSON emits an authorization event followed by an authenticated event. A username becomes the Registry namespace and can become immutable after ownership is established.
 
+At every CLI startup, bundled Observal skill trees are hash-checked against the packaged copies. Drift causes complete replacement of only the six Observal-managed skill directories, including stale extra files.
+
 ## CLI configuration
 
 ```bash

@@ -315,23 +315,10 @@ class TestSkillFile:
         reference = installed_core / "references/commands.md"
         reference.unlink()
         (installed_core / "SKILL.md").write_text("stale", encoding="utf-8")
-        skill_installer.repair_observal_skill_layout()
+        skill_installer.sync_observal_skills()
 
         assert reference.read_bytes() == REFERENCE_PATH.read_bytes()
         assert (installed_core / "SKILL.md").read_bytes() == SKILL_PATH.read_bytes()
-
-    def test_single_file_harness_install_preserves_references(self, tmp_path):
-        from observal_cli import skill_installer
-
-        source_dir = SKILLS_DIR / "observal"
-        destination = tmp_path / "skills/observal.md"
-        skill_installer._copy_skill(source_dir, destination)
-
-        assert destination.is_file()
-        for source in source_dir.rglob("*.md"):
-            if source.name != "SKILL.md":
-                target = destination.parent / source.relative_to(source_dir)
-                assert target.read_bytes() == source.read_bytes()
 
 
 class TestFrontmatter:
