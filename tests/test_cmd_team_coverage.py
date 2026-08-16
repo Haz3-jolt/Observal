@@ -282,7 +282,7 @@ def test_visibility_validation_is_local_and_exact(cli, command):
     if command == "create":
         result = runner.invoke(team.team_app, ["create", "Platform", "--visibility", "secret"])
     else:
-        result = runner.invoke(team.team_app, ["visibility", "platform", "secret"])
+        result = runner.invoke(team.team_app, ["visibility", "set", "platform", "secret"])
 
     assert result.exit_code == 7
     assert cli.rendered == ["[red]Unknown teamspace visibility: secret.[/red]"]
@@ -302,7 +302,10 @@ def test_visibility_update_resolves_handle_and_patches_exact_payload(cli):
         f"/api/v1/teams/{TEAM_ID}/visibility",
         json_data={"visibility": "private"},
     )
-    assert cli.rendered == ["[green]Teamspace is now private.[/green]"]
+    table = cli.tables[0]
+    assert table.title == "Teamspace visibility"
+    assert table.rows == [("", "", "private", "-")]
+    assert cli.rendered == [table]
 
 
 def test_delete_cancellation_stops_before_http_mutation(cli):
@@ -519,22 +522,20 @@ def test_join_request_creation_with_and_without_message_is_exact(cli):
         f"/api/v1/teams/{TEAM_ID}/join-requests",
         json_data={"message": "I maintain pager duty"},
     )
-    assert cli.rendered == [
-        f"[green]Join request sent.[/green] status=pending id={REQUEST_ID}",
-        "[dim]A team owner will approve or reject it; the decision lands in your inbox.[/dim]",
-    ]
+    table = cli.tables[0]
+    assert table.title == "Join request"
+    assert table.rows == [("-", "pending", "-", "-", "-")]
+    assert cli.rendered == [table]
 
     resolve.reset_mock()
     post.reset_mock()
     cli.rendered.clear()
+    cli.tables.clear()
     team.request_join(TEAM_ID, None)
 
     resolve.assert_called_once_with(TEAM_ID)
     post.assert_called_once_with(f"/api/v1/teams/{TEAM_ID}/join-requests", json_data={})
-    assert cli.rendered == [
-        f"[green]Join request sent.[/green] status=pending id={REQUEST_ID}",
-        "[dim]A team owner will approve or reject it; the decision lands in your inbox.[/dim]",
-    ]
+    assert cli.rendered == [cli.tables[0]]
 
 
 def test_join_request_table_formats_requesters_decisions_and_fallbacks(cli):
@@ -625,7 +626,10 @@ def test_approve_resolves_pending_username_case_insensitively(cli):
         params={"status": "pending"},
     )
     post.assert_called_once_with(f"/api/v1/teams/{TEAM_ID}/join-requests/{REQUEST_ID}/approve")
-    assert cli.rendered == ["[green]Approved.[/green] @ALICE is now a member (approved)."]
+    table = cli.tables[0]
+    assert table.title == "Approved join request"
+    assert table.rows == [("-", "approved", "-", "-", "-")]
+    assert cli.rendered == [table]
 
 
 @pytest.mark.parametrize(("reason", "payload"), [("Not yet", {"reason": "Not yet"}), (None, {})])
@@ -643,7 +647,10 @@ def test_reject_matches_email_and_sends_optional_reason(cli, reason, payload):
         f"/api/v1/teams/{TEAM_ID}/join-requests/{REQUEST_ID}/reject",
         json_data=payload,
     )
-    assert cli.rendered == ["[yellow]Rejected.[/yellow] user@example.test's request is rejected."]
+    table = cli.tables[0]
+    assert table.title == "Rejected join request"
+    assert table.rows == [("-", "rejected", "-", "-", "-")]
+    assert cli.rendered == [table]
 
 
 def test_missing_pending_request_is_a_parameter_error_and_never_decides(cli):
@@ -867,7 +874,7 @@ def test_every_team_leaf_has_shared_output_option():
             else:
                 yield child
 
-    assert len(list(leaves(command))) == 16
+    assert len(list(leaves(command))) == 26
     assert all(any(parameter.name == "output" for parameter in leaf.params) for leaf in leaves(command))
 
 
@@ -988,7 +995,7 @@ def test_join_request_mutations_return_direct_json(cli):
         ["team", "leave", "platform", "--output", "json"],
         ["team", "members", "add", "platform", "alice", "--role", "admin", "--output", "json"],
         ["team", "members", "remove", "platform", "alice", "--output", "json"],
-        ["team", "requests", "platform", "--status", "unknown", "--output", "json"],
+        ["team", "request", "list", "platform", "--status", "unknown", "--output", "json"],
         ["team", "invite", "revoke", "platform", INVITE_ID, "--output", "json"],
         ["team", "invite", "revoke", "platform", "not-a-uuid", "--yes", "--output", "json"],
     ],
@@ -1010,3 +1017,308 @@ def test_team_tables_escape_server_markup(cli):
     team.list_teams(output="table", all_teams=False)
 
     assert cli.tables[0].rows == [("Platform \\[prod]", "platform\\[/x]", "owner", "1")]
+
+
+def test_claim_personal_teamspace_table_and_json(cli):
+    response = {
+        "id": TEAM_ID,
+        "name": "Alice's Teamspace",
+        "handle": "alice-team",
+        "visibility": "private",
+        "visibility_request_status": None,
+    }
+    post = _returns(cli.client.post, response)
+
+    team.claim_personal_teamspace(output="table")
+
+    post.assert_called_once_with("/api/v1/teams/claim-personal")
+    table = cli.tables[0]
+    assert table.title == "Personal teamspace"
+    assert table.rows == [("Alice's Teamspace", "alice-team", "private", "-")]
+    assert cli.rendered == [table]
+
+    post.reset_mock()
+    cli.rendered.clear()
+    cli.tables.clear()
+    team.claim_personal_teamspace(output="json")
+
+    post.assert_called_once_with("/api/v1/teams/claim-personal")
+    assert cli.json == [response]
+    assert cli.rendered == []
+
+
+def test_visibility_request_list_table_and_empty_json(cli):
+    rows = [
+        {
+            "team_id": TEAM_ID,
+            "name": "Platform Tools",
+            "handle": "platform-tools",
+            "requested_by_username": "alice",
+            "requested_at": "2026-03-20T10:00:00Z",
+        }
+    ]
+    get = _returns(cli.client.get, rows)
+
+    team.list_visibility_requests(output="table")
+
+    get.assert_called_once_with("/api/v1/teams/visibility-requests")
+    table = cli.tables[0]
+    assert table.title == "Pending public visibility requests"
+    assert table.rows == [("Platform Tools", "platform-tools", "@alice", "2026-03-20T10:00:00Z")]
+    assert cli.rendered == [table]
+
+    get.reset_mock()
+    get.return_value = []
+    cli.rendered.clear()
+    cli.tables.clear()
+    team.list_visibility_requests(output="json")
+
+    get.assert_called_once_with("/api/v1/teams/visibility-requests")
+    assert cli.json == [[]]
+    assert cli.rendered == []
+
+
+def test_visibility_review_decisions_use_direct_json_and_tables(cli):
+    resolve = _resolve(cli)
+    approved = {
+        "id": TEAM_ID,
+        "name": "Platform Tools",
+        "handle": "platform-tools",
+        "visibility": "public",
+        "visibility_request_status": "approved",
+    }
+    rejected = {
+        **approved,
+        "visibility": "private",
+        "visibility_request_status": "rejected",
+    }
+    post = cli.client.post
+    post.side_effect = [approved, rejected]
+
+    team.approve_visibility_request("platform-tools", output="json")
+    team.reject_visibility_request("platform-tools", reason="Needs context", output="table")
+
+    assert resolve.call_count == 2
+    assert post.call_args_list == [
+        call(f"/api/v1/teams/{TEAM_ID}/visibility-request/approve"),
+        call(
+            f"/api/v1/teams/{TEAM_ID}/visibility-request/reject",
+            json_data={"reason": "Needs context"},
+        ),
+    ]
+    assert cli.json == [approved]
+    table = cli.tables[0]
+    assert table.title == "Visibility request rejected"
+    assert table.rows == [("Platform Tools", "platform-tools", "private", "rejected")]
+    assert cli.rendered == [table]
+
+
+def test_invite_preview_table_json_and_secret_redaction(cli):
+    token = "secret-invite-token"
+    response = {
+        "valid": True,
+        "invite_state": "active",
+        "is_member": False,
+        "team_id": TEAM_ID,
+        "team_name": "Platform Tools",
+        "team_handle": "platform-tools",
+        "invited_by": "Alice",
+        "request": {"id": REQUEST_ID, "status": "pending"},
+    }
+    post = _returns(cli.client.post, response)
+
+    team.preview_invite(token, output="table")
+
+    post.assert_called_once_with(
+        "/api/v1/teams/invites/preview",
+        json_data={"token": token},
+        operation="Preview teamspace invite",
+        resource="teamspace invitation",
+    )
+    table = cli.tables[0]
+    assert table.title == "Team invitation"
+    assert table.rows == [("Platform Tools", "platform-tools", "active", "no", "pending", "Alice")]
+    assert token not in repr(cli.rendered)
+
+    post.reset_mock()
+    cli.rendered.clear()
+    cli.tables.clear()
+    team.preview_invite(token, output="json")
+
+    assert cli.json == [response]
+    assert cli.rendered == []
+
+
+def test_invite_request_previews_then_creates_pending_request(cli):
+    token = "secret-invite-token"
+    preview = {"valid": True, "team_id": TEAM_ID}
+    response = {"id": REQUEST_ID, "status": "pending", "message": "Please add me"}
+    post = cli.client.post
+    post.side_effect = [preview, response]
+
+    team.request_via_invite(token, message="Please add me", output="json")
+
+    assert post.call_args_list == [
+        call(
+            "/api/v1/teams/invites/preview",
+            json_data={"token": token},
+            operation="Preview teamspace invite",
+            resource="teamspace invitation",
+        ),
+        call(
+            f"/api/v1/teams/{TEAM_ID}/join-requests",
+            json_data={"invite_token": token, "message": "Please add me"},
+            operation="Request teamspace access via invite",
+            resource="teamspace invitation",
+        ),
+    ]
+    assert cli.json == [response]
+    assert cli.rendered == []
+
+
+def test_invite_request_rejects_invalid_preview_without_leaking_token(cli):
+    token = "secret-invite-token"
+    post = _returns(cli.client.post, {"valid": False})
+
+    with pytest.raises(typer.Exit) as raised:
+        team.request_via_invite(token, message=None, output="table")
+
+    assert raised.value.exit_code == 5
+    assert post.call_count == 1
+    assert token not in repr(cli.rendered)
+    assert cli.rendered == ["[red]Invitation is invalid or unavailable.[/red]"]
+
+
+def test_invite_delete_and_request_audit_outputs(cli):
+    _resolve(cli)
+    delete = _returns(cli.client.delete, {})
+
+    team.delete_invite("platform-tools", INVITE_ID, yes=True, output="json")
+
+    delete.assert_called_once_with(f"/api/v1/teams/{TEAM_ID}/invites/{INVITE_ID}")
+    assert cli.json == [{}]
+    cli.confirm.assert_not_called()
+
+    cli.json.clear()
+    rows = [{"id": REQUEST_ID, "username": "alice", "status": "approved"}]
+    get = _returns(cli.client.get, rows)
+    team.list_invite_requests("platform-tools", INVITE_ID, output="table")
+
+    get.assert_called_once_with(f"/api/v1/teams/{TEAM_ID}/invites/{INVITE_ID}/requests")
+    table = cli.tables[0]
+    assert table.title == "Invite access requests"
+    assert table.rows == [("@alice", "approved", "-", "-", "-")]
+
+    get.reset_mock()
+    get.return_value = []
+    cli.rendered.clear()
+    cli.tables.clear()
+    team.list_invite_requests("platform-tools", INVITE_ID, output="json")
+    assert cli.json == [[]]
+
+
+def test_personal_request_status_and_withdrawal(cli):
+    _resolve(cli)
+    rows = [{"id": REQUEST_ID, "username": "alice", "status": "pending", "message": "Please add me"}]
+    get = _returns(cli.client.get, rows)
+
+    team.list_my_join_requests("platform-tools", output="table")
+
+    get.assert_called_once_with(f"/api/v1/teams/{TEAM_ID}/join-requests/mine")
+    table = cli.tables[0]
+    assert table.title == "Your join requests"
+    assert table.rows == [("@alice", "pending", "Please add me", "-", "-")]
+
+    get.reset_mock()
+    get.return_value = []
+    cli.rendered.clear()
+    cli.tables.clear()
+    team.list_my_join_requests("platform-tools", output="json")
+    assert cli.json == [[]]
+
+    get.reset_mock()
+    get.return_value = rows
+    cli.json.clear()
+    delete = _returns(cli.client.delete, {})
+    team.withdraw_join_request("platform-tools", yes=True, output="json")
+
+    get.assert_called_once_with(f"/api/v1/teams/{TEAM_ID}/join-requests/mine")
+    delete.assert_called_once_with(f"/api/v1/teams/{TEAM_ID}/join-requests/{REQUEST_ID}")
+    assert cli.json == [{}]
+    cli.confirm.assert_not_called()
+
+
+def test_withdrawal_without_pending_request_is_not_found(cli):
+    _resolve(cli)
+    _returns(cli.client.get, [{"id": REQUEST_ID, "status": "rejected"}])
+
+    with pytest.raises(typer.Exit) as raised:
+        team.withdraw_join_request("platform-tools", yes=True, output="table")
+
+    assert raised.value.exit_code == 5
+    cli.client.delete.assert_not_called()
+    assert cli.rendered == ["[red]You have no pending join request for this teamspace.[/red]"]
+
+
+def test_new_team_commands_emit_parseable_json(monkeypatch):
+    resolve = Mock(return_value=TEAM_ID)
+    get = Mock()
+    post = Mock()
+    patch = Mock()
+    delete = Mock()
+    monkeypatch.setattr(team.client, "resolve_team_id", resolve)
+    monkeypatch.setattr(team.client, "get", get)
+    monkeypatch.setattr(team.client, "post", post)
+    monkeypatch.setattr(team.client, "patch", patch)
+    monkeypatch.setattr(team.client, "delete", delete)
+
+    def invoke(arguments, expected):
+        result = runner.invoke(team.team_app, [*arguments, "--output", "json"])
+        assert result.exit_code == 0, result.output
+        assert json.loads(result.stdout) == expected
+
+    claimed = {"id": TEAM_ID, "handle": "alice-team", "visibility": "private"}
+    post.return_value = claimed
+    invoke(["claim-personal"], claimed)
+
+    get.return_value = []
+    invoke(["visibility", "list-requests"], [])
+
+    approved = {"id": TEAM_ID, "visibility": "public", "visibility_request_status": "approved"}
+    post.return_value = approved
+    invoke(["visibility", "approve", "platform-tools"], approved)
+
+    rejected = {"id": TEAM_ID, "visibility": "private", "visibility_request_status": "rejected"}
+    post.return_value = rejected
+    invoke(["visibility", "reject", "platform-tools"], rejected)
+
+    preview = {"valid": True, "team_id": TEAM_ID, "team_handle": "platform-tools"}
+    post.return_value = preview
+    invoke(["invite", "preview", "secret-token"], preview)
+
+    pending = {"id": REQUEST_ID, "team_id": TEAM_ID, "status": "pending"}
+    post.side_effect = [preview, pending]
+    invoke(["invite", "request", "secret-token"], pending)
+    post.side_effect = None
+
+    delete.return_value = {}
+    invoke(["invite", "delete", "platform-tools", INVITE_ID, "--yes"], {})
+
+    get.return_value = []
+    invoke(["invite", "requests", "platform-tools", INVITE_ID], [])
+    invoke(["request", "mine", "platform-tools"], [])
+
+    get.return_value = [pending]
+    invoke(["request", "withdraw", "platform-tools", "--yes"], {})
+
+
+def test_refactored_team_paths_are_canonical_and_output_mode_is_strict(cli):
+    command = get_command(cli_app).commands["team"]
+
+    assert {"visibility", "request"}.issubset(command.commands)
+    assert {"request-join", "requests", "approve", "reject"}.isdisjoint(command.commands)
+
+    result = runner.invoke(cli_app, ["team", "claim-personal", "--output", "yaml"])
+
+    assert result.exit_code == 2
+    cli.client.post.assert_not_called()

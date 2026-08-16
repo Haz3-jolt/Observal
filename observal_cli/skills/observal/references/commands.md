@@ -226,24 +226,36 @@ Every command available in the installed CLI. This block is generated from the T
 - `observal server upgrade`: Upgrade a local Docker deployment.
 - `observal server versions`: List Docker image versions and managed PostgreSQL backups.
 
-**`observal team`**: Manage teamspaces: creation, membership, and listing.
+**`observal team`**: Manage teamspaces: creation, membership, access, and visibility.
 
 - `observal team invite`: Manage private-team invitation links.
   - `observal team invite create`: Create a private-team invitation link. Owner or global admin only.
+  - `observal team invite delete`: Delete an unused invitation. Owner or global admin only.
   - `observal team invite list`: List invitation links for a private teamspace.
+  - `observal team invite preview`: Preview an invitation without requesting access.
+  - `observal team invite request`: Use an invitation to request access. An owner must still approve.
+  - `observal team invite requests`: List access requests associated with an invitation.
   - `observal team invite revoke`: Revoke a private-team invitation link. Owner or global admin only.
 - `observal team members`: Manage team membership.
   - `observal team members add`: Add or update a team member. Owner or admin only.
   - `observal team members list`: List members of a teamspace.
   - `observal team members remove`: Remove a team member. Owner or admin only. The last owner cannot be removed.
-- `observal team approve`: Approve a pending join request. Owner or admin only. Grants member role.
+- `observal team request`: Manage teamspace join requests.
+  - `observal team request approve`: Approve a pending join request. Owner or admin only. Grants member role.
+  - `observal team request join`: Request member access to a teamspace. An owner must approve.
+  - `observal team request list`: List a teamspace's join requests and decisions. Owner or admin only.
+  - `observal team request mine`: Show your join-request status for a teamspace.
+  - `observal team request reject`: Reject a pending join request. Owner or admin only.
+  - `observal team request withdraw`: Withdraw your pending join request for a teamspace.
+- `observal team visibility`: Manage and review teamspace visibility.
+  - `observal team visibility approve`: Approve pending public visibility. Reviewer or admin only.
+  - `observal team visibility list-requests`: List pending public visibility requests. Reviewer or admin only.
+  - `observal team visibility reject`: Reject pending public visibility. Reviewer or admin only.
+  - `observal team visibility set`: Change visibility or request public review. Owners and admins only.
+- `observal team claim-personal`: Claim or return your private personal teamspace.
 - `observal team create`: Create a teamspace. Any signed-in user can; you become the owner.
 - `observal team delete`: Delete a teamspace. Owner or admin only. This cannot be undone.
 - `observal team leave`: Leave a teamspace. The last owner cannot leave; transfer ownership first.
 - `observal team list`: List teamspaces you belong to (or all with --all).
-- `observal team reject`: Reject a pending join request. Owner or admin only.
-- `observal team request-join`: Request member access to a teamspace. An owner must approve before you join.
-- `observal team requests`: List a teamspace's join requests and decisions. Owner or admin only.
 - `observal team show`: Show teamspace detail and members.
-- `observal team visibility`: Change a teamspace's visibility. Team owners and deployment admins only.
 <!-- END AUTO-GENERATED COMMAND REFERENCE -->

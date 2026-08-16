@@ -173,12 +173,28 @@ Human login asks for the server URL; leave it blank for `http://localhost`. Neve
 ## Procedure: Teamspaces
 
 ```bash
-observal team list --output json; observal team show HANDLE --output json
+observal team list --output json
+observal team show HANDLE --output json
+observal team claim-personal --output json
 observal team create 'Platform Tools' --handle platform-tools --visibility private --output json
-observal team members add HANDLE @USER --role member --output json; observal team members list HANDLE --output json
-observal team requests HANDLE --status pending --output json; observal team invite create HANDLE --output json
+observal team visibility set HANDLE public --output json
+observal team visibility list-requests --output json
+observal team visibility approve HANDLE --output json
+observal team visibility reject HANDLE --reason 'Reason' --output json
+observal team request join HANDLE --message 'Reason for access' --output json
+observal team request mine HANDLE --output json
+observal team request withdraw HANDLE --yes --output json
+observal team request list HANDLE --status pending --output json
+observal team members add HANDLE @USER --role member --output json
+observal team invite preview INVITE_TOKEN --output json
+observal team invite request INVITE_TOKEN --message 'Reason for access' --output json
+observal team invite requests HANDLE INVITE_UUID --output json
+observal team invite delete HANDLE INVITE_UUID --yes --output json
 ```
-Use `--yes --output json` for delete, leave, member removal, and invite revocation. Treat created invite tokens and URLs as secrets.
+
+Public visibility remains private with `visibility_request_status: pending` until a reviewer approves it. Invitation requests also require owner approval.
+
+Treat invite tokens and URLs as secrets. Never echo a token after use.
 
 ---
 

@@ -484,6 +484,24 @@ def test_command_api_failure_uses_audited_context(monkeypatch):
     assert payload["request_id"] == "request-456"
 
 
+def test_team_visibility_json_failure_uses_audited_context(monkeypatch):
+    response = _response(403, data={"detail": "Reviewer role required"}, headers={"X-Request-ID": "request-789"})
+    status_error = httpx.HTTPStatusError("forbidden", request=response.request, response=response)
+    monkeypatch.setattr(client, "_client", lambda: ("https://registry.example.test", {}))
+    monkeypatch.setattr(client, "_request_with_retry", MagicMock(side_effect=status_error))
+
+    result = CliRunner().invoke(app, ["team", "visibility", "list-requests", "--output", "json"])
+
+    assert result.exit_code == ExitCode.PERMISSION
+    assert result.stdout == ""
+    payload = json.loads(result.stderr)["error"]
+    assert payload["category"] == "permission"
+    assert payload["operation"] == "List teamspace visibility requests"
+    assert payload["resource"] == "teamspaces"
+    assert payload["request_id"] == "request-789"
+    assert "detail" not in payload
+
+
 def test_all_cli_api_calls_have_custom_error_context():
     methods = {"get", "get_text", "get_with_headers", "post", "put", "patch", "delete"}
     missing = []
@@ -526,7 +544,7 @@ def test_root_group_enforces_error_contract_for_all_commands():
                 walk(child)
 
     walk(root)
-    assert len(executable) == 185
+    assert len(executable) == 195
 
 
 @pytest.mark.parametrize(
