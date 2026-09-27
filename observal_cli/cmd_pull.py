@@ -25,6 +25,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 import typer
+import yaml
 from loguru import logger as optic
 from packaging.version import InvalidVersion, Version
 from rich import print as rprint
@@ -707,21 +708,76 @@ def _rewrite_copilot_cli_hooks(content: dict, agent_id: str | None = None) -> di
     return content
 
 
-# Every generated telemetry hook, whatever the harness, runs a module under
-# observal_cli.hooks with `-m`. Matching the invocation rather than the bare
-# name keeps prose that merely mentions the module from counting as a hook.
-_SESSION_HOOK_INVOCATION = re.compile(r"-m observal_cli\.hooks\.")
+_SESSION_HOOK_INVOCATION = re.compile(r"-m\s+observal_cli\.hooks\.")
 
 
-def _reports_sessions(snippet: dict) -> bool:
-    """Whether the generated config installs Observal session telemetry hooks.
+def _has_session_hook(hooks: object) -> bool:
+    """Inspect executable fields inside hook entries, not descriptions or agent instructions."""
+    pending = [hooks]
+    seen: set[int] = set()
+    while pending:
+        node = pending.pop()
+        if not isinstance(node, (dict, list)) or id(node) in seen:
+            continue
+        seen.add(id(node))
+        if isinstance(node, list):
+            pending.extend(node)
+            continue
+        for key, value in node.items():
+            if key in {"command", "bash", "powershell"} and isinstance(value, str):
+                if _SESSION_HOOK_INVOCATION.search(value):
+                    return True
+            elif isinstance(value, (dict, list)):
+                pending.append(value)
+    return False
 
-    Agents carry their own session push hooks, so pulling one starts sending
-    sessions to the server even when the user declined `doctor patch`. The pull
-    output has to say so. Checking the whole snippet keeps this independent of
-    where each harness puts its hooks, and a missed hook is the worse failure.
-    """
-    return bool(_SESSION_HOOK_INVOCATION.search(json.dumps(snippet, default=str)))
+
+def _hook_section(content: object) -> object:
+    """Extract real hook entries from generated JSON/YAML or Markdown frontmatter."""
+    if isinstance(content, dict):
+        return content.get("hooks")
+    if not isinstance(content, str):
+        return None
+    try:
+        if content.startswith("---\n"):
+            frontmatter, separator, _body = content[4:].partition("\n---")
+            parsed = yaml.safe_load(frontmatter) if separator else None
+        else:
+            parsed = json.loads(content)
+    except (ValueError, yaml.YAMLError):
+        return None
+    return parsed.get("hooks") if isinstance(parsed, dict) else None
+
+
+def _reports_sessions(
+    snippet: dict, *, target_dir: Path | None = None, is_user_scope: bool = False, dry_run: bool = False
+) -> bool:
+    """Report configured telemetry from actual hook fields, including hooks retained by a merge."""
+    profile = snippet.get("agent_profile") or {}
+    if _has_session_hook(_hook_section(profile.get("content"))):
+        return True
+
+    hooks_cfg = snippet.get("hooks_config") or {}
+    incoming = _hook_section(hooks_cfg.get("content"))
+    if target_dir is None or not hooks_cfg.get("merge") or "path" not in hooks_cfg:
+        return _has_session_hook(incoming)
+
+    path = _resolve_path(hooks_cfg["path"], target_dir, allow_home=is_user_scope)
+    if not dry_run:
+        try:
+            return _has_session_hook(_hook_section(path.read_text(encoding="utf-8")))
+        except (OSError, UnicodeError):
+            return _has_session_hook(incoming)
+
+    # Dry runs do not write files. Project the same shallow hooks merge used by
+    # _write_file: incoming event keys replace those events, others survive.
+    try:
+        existing = _hook_section(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError):
+        existing = None
+    if isinstance(existing, dict) and isinstance(incoming, dict):
+        return _has_session_hook({**existing, **incoming})
+    return _has_session_hook(incoming)
 
 
 def _resolve_path(raw_path: str, target_dir: Path, *, allow_home: bool = False) -> Path:
@@ -1736,7 +1792,9 @@ def register_pull(app: typer.Typer):
         warnings_list = (
             lock_warnings + conflict_warnings + list(result.get("warnings") or []) + (snippet.get("_warnings") or [])
         )
-        reports_sessions = _reports_sessions(snippet)
+        reports_sessions = _reports_sessions(
+            snippet, target_dir=target_dir, is_user_scope=is_user_scope, dry_run=dry_run
+        )
 
         # Run required harness registration before recording the pull as installed.
         setup_results: list[dict] = []
@@ -1941,10 +1999,10 @@ def register_pull(app: typer.Typer):
             rprint(f"  [{style}]{esc(status)}[/{style}]  {esc(path)}")
         if reports_sessions:
             server_url = config.load().get("server_url") or "the Observal server"
-            verb = "would send" if dry_run else "sends"
+            status = "would be present after this pull" if dry_run else "are present"
             rprint(
-                f"\n  [yellow]Telemetry:[/yellow] this agent {verb} each session that uses it to {esc(server_url)}, "
-                "including prompts, tool calls and tool output."
+                f"\n  [yellow]Telemetry:[/yellow] session hooks {status} and may send prompts, "
+                f"tool calls and tool output to {esc(server_url)} when this agent is used."
             )
         latest_version = agent_detail.get("version")
         source_label = {

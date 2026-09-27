@@ -189,13 +189,13 @@ Successful JSON output has this shape:
 
 File statuses include `created`, `updated`, `merged`, `installed`, `cloned`, `would write`, and `would clone`.
 
-`agent.version` is the version that was installed and `agent.resolved_from` says why: `requested`, `upgrade`, `project-lock`, `installed`, or `latest`. `lock.status` is `locked`, `partial`, or `unlocked`; each component's `source` is `lock`, `version` (matched by its recorded version string), or `fallback-latest`. `lock.problems` lists what strict mode would refuse. `project_lock` is null for user-scope installs and dry runs. `reports_sessions` is true when the generated config includes Observal session push hooks, which means every session that uses the agent is sent to the server, whether or not `observal doctor patch` was run.
+`agent.version` is the version that was installed and `agent.resolved_from` says why: `requested`, `upgrade`, `project-lock`, `installed`, or `latest`. `lock.status` is `locked`, `partial`, or `unlocked`; each component's `source` is `lock`, `version` (matched by its recorded version string), or `fallback-latest`. `lock.problems` lists what strict mode would refuse. `project_lock` is null for user-scope installs and dry runs. `reports_sessions` is true when the installed agent profile or effective hook configuration contains Observal session push commands, including hooks retained during a merge. These hooks can report prompts, tool calls, and tool output to the configured server when they run, whether or not `observal doctor patch` was run. It does not guarantee successful delivery.
 
 Dry-run returns the same shape with `dry_run: true`, planned statuses, and `would_run` setup actions. It does not write files, execute setup commands, update the lockfile or `observal.lock`, persist an active Agent, or emit a pull audit event.
 
 ## Human output
 
-Human mode lists every created, updated, merged, installed, cloned, or planned path. Component version conflicts, server warnings, snapshot warnings, and setup commands are printed explicitly. When the agent includes session push hooks, a telemetry line names the server that will receive its sessions.
+Human mode lists every created, updated, merged, installed, cloned, or planned path. Component version conflicts, server warnings, snapshot warnings, and setup commands are printed explicitly. When session push hooks are configured, a telemetry line names the server they can report to.
 
 ## Exit codes
 

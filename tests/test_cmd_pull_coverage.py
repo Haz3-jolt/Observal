@@ -421,15 +421,103 @@ def test_write_codex_profile_preserves_quoted_instructions(monkeypatch: pytest.M
 @pytest.mark.parametrize(
     ("snippet", "expected"),
     [
-        ({"agent_profile": {"content": "command: python3 -m observal_cli.hooks.session_push"}}, True),
+        (
+            {
+                "agent_profile": {
+                    "content": '---\nhooks:\n  Stop:\n    - hooks:\n        - command: "python3 -m observal_cli.hooks.session_push"\n---\n'
+                }
+            },
+            True,
+        ),
         ({"hooks_config": {"content": {"hooks": {"stop": [{"command": "x -m observal_cli.hooks.kiro_hook"}]}}}}, True),
+        (
+            {
+                "agent_profile": {
+                    "content": {"hooks": {"stop": [{"command": "python3 -m observal_cli.hooks.session_push"}]}}
+                }
+            },
+            True,
+        ),
         ({"agent_profile": {"content": "---\nname: plain\n---\n"}, "mcp_config": {"a": {"command": "npx"}}}, False),
-        # Prose that names the module without invoking it is not a hook.
-        ({"agent_profile": {"content": "Explains how observal_cli.hooks.session_push batches events."}}, False),
+        # These mention the module but install no executable session hook.
+        ({"agent_profile": {"content": "Explains how python3 -m observal_cli.hooks.session_push runs."}}, False),
+        (
+            {"agent_profile": {"content": "---\nname: plain\n---\nRun python3 -m observal_cli.hooks.session_push"}},
+            False,
+        ),
+        (
+            {"agent_profile": {"content": "---\ndescription: 'Run python3 -m observal_cli.hooks.session_push'\n---\n"}},
+            False,
+        ),
+        (
+            {
+                "hooks_config": {
+                    "content": {
+                        "hooks": {
+                            "stop": [
+                                {"description": "python3 -m observal_cli.hooks.session_push", "command": "echo ok"}
+                            ]
+                        }
+                    }
+                }
+            },
+            False,
+        ),
+        ({"agent_profile": {"content": "---\nhooks: &hooks\n  Stop: [*hooks]\n---\n"}}, False),
     ],
 )
 def test_reports_sessions_detects_telemetry_hooks_anywhere(snippet: dict, expected: bool) -> None:
     assert cmd_pull._reports_sessions(snippet) is expected
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_reports_sessions_uses_effective_merged_hooks(tmp_path: Path, dry_run: bool) -> None:
+    path = tmp_path / "hooks.json"
+    path.write_text(json.dumps({"hooks": {"retained": [{"command": "python3 -m observal_cli.hooks.session_push"}]}}))
+    snippet = {
+        "hooks_config": {
+            "path": "hooks.json",
+            "content": {"hooks": {"new": [{"command": "echo ok"}]}},
+            "merge": True,
+        }
+    }
+    if not dry_run:
+        cmd_pull._write_file(path, snippet["hooks_config"]["content"], merge_mcp=True)
+    assert cmd_pull._reports_sessions(snippet, target_dir=tmp_path, dry_run=dry_run)
+
+    # Replacing the same event with a non-telemetry command removes that hook.
+    snippet["hooks_config"]["content"]["hooks"] = {"retained": [{"command": "echo ok"}]}
+    if not dry_run:
+        cmd_pull._write_file(path, snippet["hooks_config"]["content"], merge_mcp=True)
+    assert not cmd_pull._reports_sessions(snippet, target_dir=tmp_path, dry_run=dry_run)
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_pull_json_reports_retained_telemetry_hook(
+    pull_app: typer.Typer, boundaries: SimpleNamespace, tmp_path: Path, dry_run: bool
+) -> None:
+    target = tmp_path / "project"
+    target.mkdir()
+    path = target / "hooks.json"
+    original = {"hooks": {"retained": [{"command": "python3 -m observal_cli.hooks.session_push"}]}}
+    path.write_text(json.dumps(original))
+    boundaries.post.return_value = {
+        "config_snippet": {
+            "agent_profile": {"path": "agent.md", "content": "No hooks in this profile"},
+            "hooks_config": {
+                "path": "hooks.json",
+                "content": {"hooks": {"new": [{"command": "echo hello"}]}},
+                "merge": True,
+            },
+        }
+    }
+    result = _invoke(pull_app, target, "--output", "json", *(["--dry-run"] if dry_run else []))
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["reports_sessions"] is True
+    if dry_run:
+        assert json.loads(path.read_text()) == original
+    else:
+        assert "new" in json.loads(path.read_text())["hooks"]
 
 
 def test_resolve_hook_paths_uses_path_fallback_only_in_quoted_commands(monkeypatch: pytest.MonkeyPatch) -> None:

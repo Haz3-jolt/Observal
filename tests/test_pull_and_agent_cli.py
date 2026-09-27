@@ -377,7 +377,26 @@ class TestPullClaudeCode:
         assert result.exit_code == 0, result.output
         output = _plain(result.output)
         assert "Telemetry:" in output
+        assert "session hooks are present" in output
         assert "http://localhost:8000" in output
+
+        with _patch_config(), _patch_get_agent(), _patch_post(snippet):
+            dry_run = runner.invoke(
+                cli_app,
+                [
+                    "agent",
+                    "pull",
+                    "abc123",
+                    "--harness",
+                    "claude-code",
+                    "--dir",
+                    str(tmp_path),
+                    "--dry-run",
+                    "--no-prompt",
+                ],
+            )
+        assert dry_run.exit_code == 0, dry_run.output
+        assert "session hooks would be present after this pull" in _plain(dry_run.output)
 
     def test_no_telemetry_line_without_session_hooks(self, tmp_path: Path):
         with _patch_config(), _patch_get_agent(), _patch_post(_claude_code_snippet()):
