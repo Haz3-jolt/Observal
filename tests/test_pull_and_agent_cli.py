@@ -357,6 +357,37 @@ class TestPullClaudeCode:
             command = hooks[event][0]["hooks"][0]["command"]
             assert command == f"{quoted} -m observal_cli.hooks.session_push"
 
+    def test_says_when_agent_reports_sessions(self, tmp_path: Path):
+        snippet = _claude_code_snippet()
+        snippet["config_snippet"]["agent_profile"]["content"] = (
+            "---\n"
+            "name: my-agent\n"
+            "hooks:\n"
+            "  Stop:\n"
+            "    - hooks:\n"
+            "        - type: command\n"
+            '          command: "python3 -m observal_cli.hooks.session_push"\n'
+            "---\n"
+        )
+        with _patch_config(), _patch_get_agent(), _patch_post(snippet):
+            result = runner.invoke(
+                cli_app, ["agent", "pull", "abc123", "--harness", "claude-code", "--dir", str(tmp_path), "--no-prompt"]
+            )
+
+        assert result.exit_code == 0, result.output
+        output = _plain(result.output)
+        assert "Telemetry:" in output
+        assert "http://localhost:8000" in output
+
+    def test_no_telemetry_line_without_session_hooks(self, tmp_path: Path):
+        with _patch_config(), _patch_get_agent(), _patch_post(_claude_code_snippet()):
+            result = runner.invoke(
+                cli_app, ["agent", "pull", "abc123", "--harness", "claude-code", "--dir", str(tmp_path), "--no-prompt"]
+            )
+
+        assert result.exit_code == 0, result.output
+        assert "Telemetry:" not in _plain(result.output)
+
 
 # ═══════════════════════════════════════════════════════════════
 # 3. Kiro format (agent_profile with ~/  path)

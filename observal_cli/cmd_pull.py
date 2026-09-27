@@ -29,7 +29,7 @@ from loguru import logger as optic
 from packaging.version import InvalidVersion, Version
 from rich import print as rprint
 
-from observal_cli import client
+from observal_cli import client, config
 from observal_cli.constants import VALID_HARNESSES
 from observal_cli.errors import CliError, ErrorCategory, fail
 from observal_cli.harness import ensure_loaded, get_adapter
@@ -705,6 +705,21 @@ def _rewrite_copilot_cli_hooks(content: dict, agent_id: str | None = None) -> di
 
     content["hooks"] = hooks
     return content
+
+
+# Every generated telemetry hook, whatever the harness, runs a module under here.
+_SESSION_HOOK_MODULE = "observal_cli.hooks."
+
+
+def _reports_sessions(snippet: dict) -> bool:
+    """Whether the generated config installs Observal session telemetry hooks.
+
+    Agents carry their own session push hooks, so pulling one starts sending
+    sessions to the server even when the user declined `doctor patch`. The pull
+    output has to say so. Checking the whole snippet keeps this independent of
+    where each harness puts its hooks.
+    """
+    return _SESSION_HOOK_MODULE in json.dumps(snippet, default=str)
 
 
 def _resolve_path(raw_path: str, target_dir: Path, *, allow_home: bool = False) -> Path:
@@ -1719,6 +1734,7 @@ def register_pull(app: typer.Typer):
         warnings_list = (
             lock_warnings + conflict_warnings + list(result.get("warnings") or []) + (snippet.get("_warnings") or [])
         )
+        reports_sessions = _reports_sessions(snippet)
 
         # Run required harness registration before recording the pull as installed.
         setup_results: list[dict] = []
@@ -1906,6 +1922,7 @@ def register_pull(app: typer.Typer):
                     "files": [{"path": path, "status": status} for path, status in written],
                     "warnings": warnings_list,
                     "setup_commands": setup_results,
+                    "reports_sessions": reports_sessions,
                 }
             )
             return
@@ -1920,6 +1937,13 @@ def register_pull(app: typer.Typer):
         for path, status in written:
             style = "dim" if dry_run else "green"
             rprint(f"  [{style}]{esc(status)}[/{style}]  {esc(path)}")
+        if reports_sessions:
+            server_url = config.load().get("server_url") or "the Observal server"
+            verb = "would send" if dry_run else "sends"
+            rprint(
+                f"\n  [yellow]Telemetry:[/yellow] this agent {verb} each session that uses it to {esc(server_url)}, "
+                "including prompts, tool calls and tool output."
+            )
         latest_version = agent_detail.get("version")
         source_label = {
             "requested": "requested with --version",

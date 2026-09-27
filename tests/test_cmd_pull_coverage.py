@@ -418,6 +418,18 @@ def test_write_codex_profile_preserves_quoted_instructions(monkeypatch: pytest.M
     assert tomllib.loads((tmp_path / "agent.toml").read_text())["developer_instructions"] == instruction
 
 
+@pytest.mark.parametrize(
+    ("snippet", "expected"),
+    [
+        ({"agent_profile": {"content": "command: python3 -m observal_cli.hooks.session_push"}}, True),
+        ({"hooks_config": {"content": {"hooks": {"stop": [{"command": "x -m observal_cli.hooks.kiro_hook"}]}}}}, True),
+        ({"agent_profile": {"content": "---\nname: plain\n---\n"}, "mcp_config": {"a": {"command": "npx"}}}, False),
+    ],
+)
+def test_reports_sessions_detects_telemetry_hooks_anywhere(snippet: dict, expected: bool) -> None:
+    assert cmd_pull._reports_sessions(snippet) is expected
+
+
 def test_resolve_hook_paths_uses_path_fallback_only_in_quoted_commands(monkeypatch: pytest.MonkeyPatch) -> None:
     import shutil
 
