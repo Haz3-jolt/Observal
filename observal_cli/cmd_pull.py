@@ -707,8 +707,10 @@ def _rewrite_copilot_cli_hooks(content: dict, agent_id: str | None = None) -> di
     return content
 
 
-# Every generated telemetry hook, whatever the harness, runs a module under here.
-_SESSION_HOOK_MODULE = "observal_cli.hooks."
+# Every generated telemetry hook, whatever the harness, runs a module under
+# observal_cli.hooks with `-m`. Matching the invocation rather than the bare
+# name keeps prose that merely mentions the module from counting as a hook.
+_SESSION_HOOK_INVOCATION = re.compile(r"-m observal_cli\.hooks\.")
 
 
 def _reports_sessions(snippet: dict) -> bool:
@@ -717,9 +719,9 @@ def _reports_sessions(snippet: dict) -> bool:
     Agents carry their own session push hooks, so pulling one starts sending
     sessions to the server even when the user declined `doctor patch`. The pull
     output has to say so. Checking the whole snippet keeps this independent of
-    where each harness puts its hooks.
+    where each harness puts its hooks, and a missed hook is the worse failure.
     """
-    return _SESSION_HOOK_MODULE in json.dumps(snippet, default=str)
+    return bool(_SESSION_HOOK_INVOCATION.search(json.dumps(snippet, default=str)))
 
 
 def _resolve_path(raw_path: str, target_dir: Path, *, allow_home: bool = False) -> Path:

@@ -424,6 +424,8 @@ def test_write_codex_profile_preserves_quoted_instructions(monkeypatch: pytest.M
         ({"agent_profile": {"content": "command: python3 -m observal_cli.hooks.session_push"}}, True),
         ({"hooks_config": {"content": {"hooks": {"stop": [{"command": "x -m observal_cli.hooks.kiro_hook"}]}}}}, True),
         ({"agent_profile": {"content": "---\nname: plain\n---\n"}, "mcp_config": {"a": {"command": "npx"}}}, False),
+        # Prose that names the module without invoking it is not a hook.
+        ({"agent_profile": {"content": "Explains how observal_cli.hooks.session_push batches events."}}, False),
     ],
 )
 def test_reports_sessions_detects_telemetry_hooks_anywhere(snippet: dict, expected: bool) -> None:
