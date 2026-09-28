@@ -1795,10 +1795,16 @@ def register_pull(app: typer.Typer):
                 quiet=output == "json",
             )
         except CliError as error:
-            # Skill or file writes can fail after earlier hook files were saved.
-            # The failure payload describes those files, not a completed install.
-            if isinstance(error.result, dict) and error.result.get("partial"):
+            # A failed write can also leave a pre-existing hook active when
+            # this pull wrote no files at all. Inspect only files on disk, not
+            # the proposed snippet, before describing session collection.
+            if isinstance(error.result, dict) and not dry_run:
                 paths = [item["path"] for item in error.result.get("files", []) if isinstance(item, dict)]
+                # A failed replacement leaves the old hook file active even
+                # though that path was never added to the written-files list.
+                failed_path = error.result.get("failed_path")
+                if isinstance(failed_path, str):
+                    paths.append(failed_path)
                 error.result["reports_sessions"] = _reports_written_sessions(paths)
                 if error.result["reports_sessions"]:
                     disclose_telemetry()

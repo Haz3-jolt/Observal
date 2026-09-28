@@ -1874,6 +1874,62 @@ def test_partial_pull_does_not_claim_unwritten_profile_hooks(
     assert not (target / "agent.md").exists()
 
 
+@pytest.mark.parametrize("existing_hook", [True, False])
+@pytest.mark.parametrize("preceding_file", [True, False])
+def test_failed_hook_write_reports_only_existing_session_hooks(
+    pull_app_boundary: typer.Typer,
+    pull_app: typer.Typer,
+    boundaries: SimpleNamespace,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    existing_hook: bool,
+    preceding_file: bool,
+) -> None:
+    target = tmp_path / "project"
+    target.mkdir()
+    command = "python3 -m observal_cli.hooks.session_push"
+    original = {"hooks": {"stop": [{"command": command if existing_hook else "echo ok"}]}}
+    hook_path = target / "hooks.json"
+    hook_path.write_text(json.dumps(original))
+    snippet = {
+        "hooks_config": {
+            "path": "hooks.json",
+            "content": {"hooks": {"start": [{"command": "echo ok" if existing_hook else command}]}},
+            "merge": True,
+        }
+    }
+    if preceding_file:
+        snippet["mcp_config"] = {"path": "mcp.json", "content": {"mcpServers": {"example": {"command": "echo"}}}}
+    boundaries.post.return_value = {"config_snippet": snippet}
+    atomic_write = cmd_pull._atomic_write_text
+
+    def fail_hook_write(path: Path, content: str) -> None:
+        if path.name == "hooks.json":
+            raise OSError("synthetic write failure")
+        atomic_write(path, content)
+
+    monkeypatch.setattr(cmd_pull, "_atomic_write_text", fail_hook_write)
+
+    result = _invoke(pull_app_boundary, target, "--output", "json")
+    assert result.exit_code == 9
+    partial = json.loads(result.stderr)["error"]["result"]
+    assert partial["stage"] == "write_files"
+    assert partial["partial"] is preceding_file
+    assert partial["failed_path"] == str(hook_path)
+    expected_files = [{"path": str(target / "mcp.json"), "status": "created"}] if preceding_file else []
+    assert partial["files"] == expected_files
+    assert partial["reports_sessions"] is existing_hook
+    assert json.loads(hook_path.read_text()) == original
+    assert "synthetic write failure" not in result.stderr
+
+    human_target = tmp_path / "human-project"
+    human_target.mkdir()
+    (human_target / "hooks.json").write_text(json.dumps(original))
+    human = _invoke(pull_app, human_target)
+    assert human.exit_code == 9
+    assert ("Telemetry:" in human.output) is existing_hook
+
+
 def test_pull_lockfile_failure_is_not_reported_as_success(
     pull_app: typer.Typer,
     boundaries: SimpleNamespace,
