@@ -520,6 +520,55 @@ def test_pull_json_reports_retained_telemetry_hook(
         assert "new" in json.loads(path.read_text())["hooks"]
 
 
+def test_reports_written_sessions_recognizes_yaml_hooks_but_not_prose(tmp_path: Path) -> None:
+    hooks = tmp_path / "hooks.yaml"
+    hooks.write_text("hooks:\n  stop:\n    - command: python3 -m observal_cli.hooks.session_push\n")
+    prose = tmp_path / "notes.md"
+    prose.write_text("Use python3 -m observal_cli.hooks.session_push to install hooks.\n")
+    assert cmd_pull._reports_written_sessions([str(prose), str(hooks)])
+    assert not cmd_pull._reports_written_sessions([str(prose)])
+
+
+def test_dry_run_reports_string_hook_replacement_not_a_merge(tmp_path: Path) -> None:
+    path = tmp_path / "hooks.json"
+    path.write_text(json.dumps({"hooks": {"stop": [{"command": "python3 -m observal_cli.hooks.session_push"}]}}))
+    replacement = json.dumps({"hooks": {"onStart": [{"command": "echo ok"}]}})
+    snippet = {"hooks_config": {"path": "hooks.json", "content": replacement, "merge": True}}
+
+    assert not cmd_pull._reports_sessions(snippet, target_dir=tmp_path, dry_run=True)
+    cmd_pull._write_file(path, replacement, merge_mcp=True)
+    assert not cmd_pull._reports_sessions(snippet, target_dir=tmp_path)
+
+
+def test_pull_dry_run_string_hook_replacement_matches_real_pull(
+    pull_app: typer.Typer, boundaries: SimpleNamespace, tmp_path: Path
+) -> None:
+    target = tmp_path / "project"
+    target.mkdir()
+    path = target / "hooks.json"
+    original = {"hooks": {"retained": [{"command": "python3 -m observal_cli.hooks.session_push"}]}}
+    path.write_text(json.dumps(original))
+    boundaries.post.return_value = {
+        "config_snippet": {
+            "hooks_config": {
+                "path": "hooks.json",
+                "content": json.dumps({"hooks": {"new": [{"command": "echo hello"}]}}),
+                "merge": True,
+            }
+        }
+    }
+
+    preview = _invoke(pull_app, target, "--output", "json", "--dry-run")
+    assert preview.exit_code == 0, preview.output
+    assert json.loads(preview.stdout)["reports_sessions"] is False
+    assert json.loads(path.read_text()) == original
+
+    installed = _invoke(pull_app, target, "--output", "json")
+    assert installed.exit_code == 0, installed.output
+    assert json.loads(installed.stdout)["reports_sessions"] is False
+    assert json.loads(path.read_text())["hooks"] == {"new": [{"command": "echo hello"}]}
+
+
 def test_resolve_hook_paths_uses_path_fallback_only_in_quoted_commands(monkeypatch: pytest.MonkeyPatch) -> None:
     import shutil
 
@@ -1740,9 +1789,89 @@ def test_pull_json_setup_failure_reports_secret_free_partial_state(
     assert partial["stage"] == "run_setup_commands"
     assert partial["files"] == [{"path": str(target / "agent.md"), "status": "created"}]
     assert partial["setup_commands"] == [{"executable": "broken", "status": "failed", "return_code": 2}]
+    assert partial["reports_sessions"] is False
     assert "secret-value" not in result.stderr
     assert "private stderr" not in result.stderr
     boundaries.upsert.assert_not_called()
+
+
+@pytest.mark.parametrize("failure_stage", ["run_setup_commands", "install_skills"])
+@pytest.mark.parametrize("hook_source", ["hooks_config", "agent_profile"])
+def test_partial_pull_discloses_session_hooks_on_failure(
+    pull_app_boundary: typer.Typer,
+    pull_app: typer.Typer,
+    boundaries: SimpleNamespace,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_stage: str,
+    hook_source: str,
+) -> None:
+    hook_command = "python3 -m observal_cli.hooks.session_push"
+    if hook_source == "hooks_config":
+        hook_path = "hooks.json"
+        snippet = {"hooks_config": {"path": hook_path, "content": {"hooks": {"stop": [{"command": hook_command}]}}}}
+    else:
+        hook_path = "agent.md"
+        snippet = {
+            "agent_profile": {
+                "path": hook_path,
+                "content": f"---\nhooks:\n  stop:\n    - command: {hook_command}\n---\nAgent profile\n",
+            }
+        }
+    if failure_stage == "run_setup_commands":
+        snippet["mcp_setup_commands"] = [["broken", "--token", "secret-value"]]
+        monkeypatch.setattr(
+            cmd_pull.subprocess,
+            "run",
+            MagicMock(return_value=subprocess.CompletedProcess(["broken"], 2, "", "private stderr")),
+        )
+    else:
+        snippet["skill_components"] = [{"name": "broken-skill", "skill_md_content": "content"}]
+        boundaries.direct_install.side_effect = OSError("private filesystem detail")
+    boundaries.post.return_value = {"config_snippet": snippet}
+    target = tmp_path / "json-project"
+
+    json_result = _invoke(pull_app_boundary, target, "--output", "json")
+    assert json_result.exit_code == 9
+    error = json.loads(json_result.stderr)["error"]
+    assert error["result"]["stage"] == failure_stage
+    assert error["result"]["reports_sessions"] is True
+    assert (target / hook_path).is_file()
+    assert "secret-value" not in json_result.stderr
+    assert "private stderr" not in json_result.stderr
+
+    human_result = _invoke(pull_app, tmp_path / "human-project")
+    assert human_result.exit_code == 9
+    assert "Telemetry:" in human_result.output
+    assert "session hooks are present" in human_result.output
+    assert "may send prompts" in human_result.output
+    assert (tmp_path / "human-project" / hook_path).is_file()
+
+
+def test_partial_pull_does_not_claim_unwritten_profile_hooks(
+    pull_app_boundary: typer.Typer, boundaries: SimpleNamespace, tmp_path: Path
+) -> None:
+    target = tmp_path / "project"
+    target.mkdir()
+    (target / "hooks.json").write_text("not valid JSON")
+    boundaries.post.return_value = {
+        "config_snippet": {
+            "mcp_config": {"path": "mcp.json", "content": {"mcpServers": {"example": {"command": "echo"}}}},
+            "hooks_config": {"path": "hooks.json", "content": {"hooks": {}}, "merge": True},
+            "agent_profile": {
+                "path": "agent.md",
+                "content": "---\nhooks:\n  stop:\n    - command: python3 -m observal_cli.hooks.session_push\n---\n",
+            },
+        }
+    }
+
+    result = _invoke(pull_app_boundary, target, "--output", "json")
+    assert result.exit_code == 6
+    partial = json.loads(result.stderr)["error"]["result"]
+    assert partial["stage"] == "write_files"
+    assert partial["reports_sessions"] is False
+    assert (target / "mcp.json").is_file()
+    assert not (target / "agent.md").exists()
 
 
 def test_pull_lockfile_failure_is_not_reported_as_success(

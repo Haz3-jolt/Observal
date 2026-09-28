@@ -743,7 +743,10 @@ def _hook_section(content: object) -> object:
             frontmatter, separator, _body = content[4:].partition("\n---")
             parsed = yaml.safe_load(frontmatter) if separator else None
         else:
-            parsed = json.loads(content)
+            try:
+                parsed = json.loads(content)
+            except ValueError:
+                parsed = yaml.safe_load(content)
     except (ValueError, yaml.YAMLError):
         return None
     return parsed.get("hooks") if isinstance(parsed, dict) else None
@@ -759,7 +762,14 @@ def _reports_sessions(
 
     hooks_cfg = snippet.get("hooks_config") or {}
     incoming = _hook_section(hooks_cfg.get("content"))
-    if target_dir is None or not hooks_cfg.get("merge") or "path" not in hooks_cfg:
+    # _write_file merges only mappings; string content replaces the entire file
+    # even when the snippet requests a merge.
+    if (
+        target_dir is None
+        or not hooks_cfg.get("merge")
+        or "path" not in hooks_cfg
+        or not isinstance(hooks_cfg.get("content"), dict)
+    ):
         return _has_session_hook(incoming)
 
     path = _resolve_path(hooks_cfg["path"], target_dir, allow_home=is_user_scope)
@@ -778,6 +788,17 @@ def _reports_sessions(
     if isinstance(existing, dict) and isinstance(incoming, dict):
         return _has_session_hook({**existing, **incoming})
     return _has_session_hook(incoming)
+
+
+def _reports_written_sessions(paths: list[str]) -> bool:
+    """Inspect hook files actually left on disk, including a partial install."""
+    for raw_path in paths:
+        try:
+            if _has_session_hook(_hook_section(Path(raw_path).read_text(encoding="utf-8"))):
+                return True
+        except (OSError, UnicodeError):
+            continue
+    return False
 
 
 def _resolve_path(raw_path: str, target_dir: Path, *, allow_home: bool = False) -> Path:
@@ -1753,16 +1774,43 @@ def register_pull(app: typer.Typer):
             )
 
         snippet = rewrite_observal_interpreter(snippet)
-        written, failed_skills = write_install_snippet(
-            snippet,
-            harness=harness,
-            adapter=adapter,
-            target_dir=target_dir,
-            agent_id=str(agent_detail.get("id", resolved)),
-            is_user_scope=is_user_scope,
-            dry_run=dry_run,
-            quiet=output == "json",
+
+        def disclose_telemetry() -> None:
+            if output != "json" and not dry_run:
+                server_url = config.load().get("server_url") or "the Observal server"
+                rprint(
+                    "\n  [yellow]Telemetry:[/yellow] session hooks are present and may send prompts, "
+                    f"tool calls and tool output to {esc(server_url)} when this agent is used."
+                )
+
+        try:
+            written, failed_skills = write_install_snippet(
+                snippet,
+                harness=harness,
+                adapter=adapter,
+                target_dir=target_dir,
+                agent_id=str(agent_detail.get("id", resolved)),
+                is_user_scope=is_user_scope,
+                dry_run=dry_run,
+                quiet=output == "json",
+            )
+        except CliError as error:
+            # Skill or file writes can fail after earlier hook files were saved.
+            # The failure payload describes those files, not a completed install.
+            if isinstance(error.result, dict) and error.result.get("partial"):
+                paths = [item["path"] for item in error.result.get("files", []) if isinstance(item, dict)]
+                error.result["reports_sessions"] = _reports_written_sessions(paths)
+                if error.result["reports_sessions"]:
+                    disclose_telemetry()
+            raise
+
+        reports_sessions = (
+            _reports_sessions(snippet, target_dir=target_dir, is_user_scope=is_user_scope, dry_run=True)
+            if dry_run
+            else _reports_written_sessions([path for path, _status in written])
         )
+        if reports_sessions:
+            disclose_telemetry()
 
         if failed_skills:
             fail(
@@ -1777,6 +1825,7 @@ def register_pull(app: typer.Typer):
                     "install_skills",
                     failed_skills=failed_skills,
                     installation_tracked=False,
+                    reports_sessions=reports_sessions,
                 ),
             )
 
@@ -1791,9 +1840,6 @@ def register_pull(app: typer.Typer):
 
         warnings_list = (
             lock_warnings + conflict_warnings + list(result.get("warnings") or []) + (snippet.get("_warnings") or [])
-        )
-        reports_sessions = _reports_sessions(
-            snippet, target_dir=target_dir, is_user_scope=is_user_scope, dry_run=dry_run
         )
 
         # Run required harness registration before recording the pull as installed.
@@ -1846,6 +1892,7 @@ def register_pull(app: typer.Typer):
                     setup_results=setup_results,
                     dry_run=dry_run,
                     installation_tracked=False,
+                    reports_sessions=reports_sessions,
                 ),
             )
 
@@ -1885,6 +1932,7 @@ def register_pull(app: typer.Typer):
                         setup_results=setup_results,
                         installation_tracked=False,
                         active_agent_persisted=False,
+                        reports_sessions=reports_sessions,
                     ),
                 )
 
@@ -1916,6 +1964,7 @@ def register_pull(app: typer.Typer):
                             setup_results=setup_results,
                             installation_tracked=True,
                             active_agent_persisted=False,
+                            reports_sessions=reports_sessions,
                         ),
                     )
 
@@ -1942,6 +1991,7 @@ def register_pull(app: typer.Typer):
                         setup_results=setup_results,
                         installation_tracked=True,
                         active_agent_persisted=False,
+                        reports_sessions=reports_sessions,
                     ),
                 )
 
@@ -1997,11 +2047,10 @@ def register_pull(app: typer.Typer):
         for path, status in written:
             style = "dim" if dry_run else "green"
             rprint(f"  [{style}]{esc(status)}[/{style}]  {esc(path)}")
-        if reports_sessions:
+        if reports_sessions and dry_run:
             server_url = config.load().get("server_url") or "the Observal server"
-            status = "would be present after this pull" if dry_run else "are present"
             rprint(
-                f"\n  [yellow]Telemetry:[/yellow] session hooks {status} and may send prompts, "
+                "\n  [yellow]Telemetry:[/yellow] session hooks would be present after this pull and may send prompts, "
                 f"tool calls and tool output to {esc(server_url)} when this agent is used."
             )
         latest_version = agent_detail.get("version")
