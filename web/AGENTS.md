@@ -143,4 +143,4 @@ pnpm e2e:ui       # Playwright UI mode
 
 E2E specs live in `tests/e2e/*.spec.ts` in the repo root workspace.
 
-For UI changes, rebuild the live stack with `make rebuild-fast` and check the affected pages in a browser (or run the relevant spec with `CI=1 pnpm exec playwright test <spec>` against `:80`) in addition to `pnpm build` and `pnpm lint`.
+For UI changes, rebuild the live stack with `make rebuild` and check the affected pages in a browser (or run the relevant spec with `CI=1 pnpm exec playwright test <spec>` against `:80`) in addition to `pnpm build` and `pnpm lint`.
