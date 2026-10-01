@@ -131,6 +131,8 @@ Vite 8 SPA with TanStack Router, not Next.js. `web/AGENTS.md` is the authoritati
 - **Canonical registry identity is `namespace/slug`.** UUIDs remain accepted; legacy bare names resolve only when unambiguous. CLI slash-qualified references resolve to UUIDs before using existing action routes.
 - **Hard rewrite policy.** No deprecation wrappers. When code moves, callers update in the same PR. Dead code is deleted immediately.
 - **Tests mock externals.** No Docker needed to run the test suite. E2E specs in `tests/e2e/` are the exception (require running stack).
+- **Verify against a live instance, not only tests.** When a change affects runtime behavior (API routes, worker, migrations, web UI, Dockerfiles, compose), run `make rebuild-fast` and exercise it on the running stack (curl the endpoint, click through the page, run the relevant Playwright spec) before calling it done. Mocked tests passing is not proof it works in the container. Skip this for docs-only, test-only, or pure refactors with no runtime effect.
+- **Docker image facts.** The API container root filesystem is read-only, so Python bytecode is precompiled in `Dockerfile.api` (otherwise every start recompiles). The web image runs `tsc` and the Vite bundle as parallel BuildKit stages, so a type error still fails the build via the `typecheck` stage marker.
 
 ## CLI structure
 
@@ -212,7 +214,8 @@ Session delivery uses a local outbox and resumes after transient network failure
 # Docker stack (10 services: init, api, db, clickhouse, redis, worker, web, lb, prometheus, grafana)
 make up                  # start
 make down                # stop
-make rebuild             # rebuild and restart
+make rebuild-fast        # rebuild only the api/web images, then restart (normal code changes)
+make rebuild             # full rebuild and restart (compose topology changes)
 make logs                # tail logs
 
 # CLI (installed via uv)
