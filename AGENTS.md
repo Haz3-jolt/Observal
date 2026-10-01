@@ -65,7 +65,7 @@ observal-server/       FastAPI server
   jobs/                Background job definitions (catalog, maintenance, migration)
 
 
-web/                   Vite 6 SPA / React 19 / TanStack Router (see web/AGENTS.md)
+web/                   Vite 8 SPA / React 19 / TanStack Router (see web/AGENTS.md)
 packages/pi-extension/ Pi telemetry extension (npm: observal-pi)
 docker/                Docker Compose stack (10 services)
 fuzz/                  Atheris fuzz targets + OSS-Fuzz project config mirror
@@ -116,7 +116,7 @@ Today only Kiro meets all four. A minimal harness has:
 
 ### TypeScript (web)
 
-Vite 6 SPA with TanStack Router, not Next.js. `web/AGENTS.md` is the authoritative frontend reference; the rules below are the short form.
+Vite 8 SPA with TanStack Router, not Next.js. `web/AGENTS.md` is the authoritative frontend reference; the rules below are the short form.
 
 - **Auth storage is split.** `observal_access_token` lives in sessionStorage; `observal_refresh_token` and cached profile fields (role, name, email, username, avatar) live in localStorage so refresh survives reloads and new tabs. Do not widen localStorage use without changing the auth model deliberately.
 - **TanStack Query hooks** from `use-api.ts` for all data fetching. Raw `fetch` in components is a known exception, not a pattern: a handful of call sites (co-authors, edit-lock release via `keepalive`, logout, SAML exchange) still use it. Do not add more.

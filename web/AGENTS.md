@@ -3,7 +3,7 @@
 
 # Web Frontend
 
-Vite 6 / React 19 / TypeScript 6 / TanStack Router / Tailwind CSS 4 / Playwright 1.59
+Vite 8 / React 19 / TypeScript 6 / TanStack Router / Tailwind CSS 4 / Playwright 1.59
 
 ## How users interact with it
 
