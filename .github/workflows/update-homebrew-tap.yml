@@ -1,28 +1,21 @@
 # SPDX-FileCopyrightText: 2026 Apoorv Garg <apoorvgarg.21@gmail.com>
 # SPDX-License-Identifier: Apache-2.0
 
-# Updates the Observal/homebrew-observal tap after every published release.
-#
-# Fires when a GitHub release is published (the release.yml workflow flips a
-# draft to published as its final step). Downloads the just-published binaries
-# from the release, reads their sha256s from checksums.txt, rewrites
-# Formula/observal-cli.rb in the tap, and pushes a commit.
+# Called only after the newest stable release passes public verification.
 
 name: Update Homebrew tap
 
 on:
-  release:
-    types: [published]
-  workflow_dispatch:
+  workflow_call:
     inputs:
       version:
-        description: "Version to publish to the tap (e.g. 0.6.0). Must match an existing GitHub release."
         required: true
         type: string
 
 concurrency:
   group: update-homebrew-tap
   cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read
@@ -31,16 +24,17 @@ jobs:
   update-tap:
     name: Bump observal-cli.rb in homebrew-observal
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    if: github.repository == 'Observal/Observal'
     steps:
       - name: Resolve release version
         id: version
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            VERSION="${{ inputs.version }}"
-          else
-            VERSION="${GITHUB_REF_NAME#v}"
-          fi
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          LATEST=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          [ "$LATEST" = "v$VERSION" ] || exit 1
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -143,7 +137,7 @@ jobs:
           git config user.email "observal-release[bot]@users.noreply.github.com"
 
           if git diff --quiet; then
-            echo "Formula already up-to-date for v${VERSION} — nothing to push."
+            echo "Formula already up-to-date for v${VERSION}; nothing to push."
             exit 0
           fi
 
