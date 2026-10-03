@@ -1874,6 +1874,34 @@ def test_partial_pull_does_not_claim_unwritten_profile_hooks(
     assert not (target / "agent.md").exists()
 
 
+def test_earlier_mcp_write_failure_still_reports_existing_session_hooks(
+    pull_app_boundary: typer.Typer, pull_app: typer.Typer, boundaries: SimpleNamespace, tmp_path: Path
+) -> None:
+    command = "python3 -m observal_cli.hooks.session_push"
+    snippet = {
+        "mcp_config": {"path": "mcp.json", "content": {"mcpServers": {"example": {"command": "echo"}}}, "merge": True},
+        "hooks_config": {"path": "hooks.json", "content": {"hooks": {"start": [{"command": "echo ok"}]}}},
+    }
+    boundaries.post.return_value = {"config_snippet": snippet}
+
+    def project(name: str) -> Path:
+        target = tmp_path / name
+        target.mkdir()
+        (target / "mcp.json").write_text("not valid JSON")
+        (target / "hooks.json").write_text(json.dumps({"hooks": {"stop": [{"command": command}]}}))
+        return target
+
+    result = _invoke(pull_app_boundary, project("json-project"), "--output", "json")
+    assert result.exit_code != 0
+    partial = json.loads(result.stderr)["error"]["result"]
+    assert partial["reports_sessions"] is True
+    assert not any(item["path"].endswith("hooks.json") for item in partial["files"])
+
+    human = _invoke(pull_app, project("human-project"))
+    assert human.exit_code != 0
+    assert "Telemetry:" in human.output
+
+
 @pytest.mark.parametrize("existing_hook", [True, False])
 @pytest.mark.parametrize("preceding_file", [True, False])
 def test_failed_hook_write_reports_only_existing_session_hooks(

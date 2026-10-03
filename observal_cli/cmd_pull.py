@@ -801,6 +801,24 @@ def _reports_written_sessions(paths: list[str]) -> bool:
     return False
 
 
+def _hook_destinations(snippet: dict, *, adapter, target_dir: Path, is_user_scope: bool) -> list[str]:
+    """Resolved hook-config and agent-profile destinations; unsafe paths are skipped."""
+    destinations: list[str] = []
+    for key, allow_home in (
+        ("hooks_config", is_user_scope),
+        ("agent_profile", adapter.allow_home_agent_profile(is_user_scope)),
+    ):
+        entry = snippet.get(key)
+        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+            continue
+        try:
+            destinations.append(str(_resolve_path(entry["path"], target_dir, allow_home=allow_home)))
+        except CliError:
+            # An escaping path is rejected by the write itself and never touched.
+            continue
+    return destinations
+
+
 def _resolve_path(raw_path: str, target_dir: Path, *, allow_home: bool = False) -> Path:
     """Resolve a path from the config snippet relative to *target_dir*.
 
@@ -1805,6 +1823,16 @@ def register_pull(app: typer.Typer):
                 failed_path = error.result.get("failed_path")
                 if isinstance(failed_path, str):
                     paths.append(failed_path)
+                # An earlier write (for example an MCP config) can fail before the
+                # hook or profile destinations are reached; inspect those too.
+                paths.extend(
+                    _hook_destinations(
+                        snippet,
+                        adapter=adapter,
+                        target_dir=target_dir,
+                        is_user_scope=is_user_scope,
+                    )
+                )
                 error.result["reports_sessions"] = _reports_written_sessions(paths)
                 if error.result["reports_sessions"]:
                     disclose_telemetry()
