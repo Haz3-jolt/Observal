@@ -174,6 +174,21 @@ def test_gh_json_retries_transient_failures_then_fails_loudly(monkeypatch):
         release.gh_json("o/r", "x")
 
 
+def test_note_overrides_apply_and_reject_unknown_prs():
+    a, b = Change(["a"], "a", "n", "e", pr=1), Change(["b"], "b", "n", "e", pr=2)
+    a.include_in_notes = False
+    release.apply_note_overrides([a, b], (1,), (2,), (1,))
+    assert a.include_in_notes and a.highlight and not b.include_in_notes
+    release.apply_note_overrides([a, b], titles={2: "New"}, categories={2: "Fixes"}, breaking=(2,))
+    assert (b.title, b.category, b.breaking, b.include_in_notes) == ("New", "Fixes", True, True)
+    with pytest.raises(release.ReleaseError, match="Unknown category"):
+        release.apply_note_overrides([a, b], categories={1: "Nope"})
+    with pytest.raises(release.ReleaseError, match="#9"):
+        release.apply_note_overrides([a, b], (9,), (), ())
+    with pytest.raises(release.ReleaseError, match="overlap"):
+        release.apply_note_overrides([a, b], (1,), (1,), ())
+
+
 def test_resolve_release_push_uses_exact_commit_on_release_branch(monkeypatch):
     normal = Commit("a" * 40, "A", "a@example.com", "fix: normal", "")
     merged = Commit("b" * 40, "B", "b@example.com", "chore(release): v1.10.8", "")

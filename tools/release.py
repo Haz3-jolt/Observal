@@ -242,6 +242,42 @@ def discover_changes(repo: str, previous_ref: str, branch: str, base: str = "mai
     return changes
 
 
+def apply_note_overrides(
+    changes: list[Change],
+    include: tuple[int, ...] = (),
+    exclude: tuple[int, ...] = (),
+    highlight: tuple[int, ...] = (),
+    breaking: tuple[int, ...] = (),
+    titles: dict[int, str] | None = None,
+    categories: dict[int, str] | None = None,
+) -> None:
+    titles, categories = titles or {}, categories or {}
+    by_pr = {change.pr: change for change in changes if change.pr}
+    for numbers in (include, exclude, highlight, breaking, titles, categories):
+        unknown = sorted(set(numbers) - by_pr.keys())
+        if unknown:
+            raise ReleaseError(f"PRs not in this release: {', '.join(f'#{n}' for n in unknown)}")
+    if set(include) & set(exclude):
+        raise ReleaseError("--include-pr and --exclude-pr overlap")
+    bad = sorted(set(categories.values()) - set(CATEGORIES))
+    if bad:
+        raise ReleaseError(f"Unknown category {', '.join(bad)}; choose from {', '.join(CATEGORIES)}")
+    for number, title in titles.items():
+        by_pr[number].title = title
+    for number, category in categories.items():
+        by_pr[number].category = category
+        by_pr[number].include_in_notes = by_pr[number].include_in_notes or category != "Maintenance"
+    for number in include:
+        by_pr[number].include_in_notes = True
+    for number in exclude:
+        by_pr[number].include_in_notes = False
+    for number in highlight:
+        by_pr[number].include_in_notes = True
+        by_pr[number].highlight = True
+    for number in breaking:
+        by_pr[number].breaking = True
+
+
 def coauthors(commits: list[Commit]) -> list[Contributor]:
     contributors: list[Contributor] = []
     pattern = re.compile(r"^Co-authored-by:\s*(.+?)\s*<([^>]+)>$", re.IGNORECASE | re.MULTILINE)
@@ -736,6 +772,7 @@ def prepare(
     channel: str | None = None,
     version: str | None = None,
     yes: bool = False,
+    overrides: dict | None = None,
 ) -> None:
     import questionary
 
@@ -747,6 +784,7 @@ def prepare(
     branch = f"{upstream}/{base}"
     previous_tag = latest_tag(branch)
     changes = discover_changes(repo, previous_tag, branch, base)
+    apply_note_overrides(changes, **(overrides or {}))
     if yes:
         if not channel:
             raise ReleaseError("Non-interactive preparation requires --channel")
@@ -760,7 +798,7 @@ def prepare(
         names = ", ".join(
             f"#{change.pr}" if change.pr else change.commits[-1][:7] for change in undocumented_migrations
         )
-        raise ReleaseError(f"Database migrations must be included in release notes: {names}")
+        raise ReleaseError(f"Database migrations must be included in release notes (use --include-pr): {names}")
     source_sha = run("git", "rev-parse", branch)
     commits = [
         commit for commit in commit_log(f"{previous_tag}..{source_sha}") if not RELEASE_TITLE.fullmatch(commit.title)
@@ -833,6 +871,13 @@ def prepare(
         run("git", "worktree", "remove", str(worktree), capture=False)
 
 
+def _pr_pair(value: str) -> tuple[int, str]:
+    number, sep, text = value.partition("=")
+    if not sep or not number.isdigit() or not text:
+        raise argparse.ArgumentTypeError("expected PR=VALUE")
+    return int(number), text
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     action = parser.add_mutually_exclusive_group()
@@ -845,6 +890,17 @@ def main() -> None:
     parser.add_argument("--channel", choices=("alpha", "beta", "rc", "stable"))
     parser.add_argument("--version", help="explicit version within the current release line")
     parser.add_argument("--yes", action="store_true", help="prepare without prompts, requires --channel")
+    for flag, text in (("include", "include in"), ("exclude", "exclude from"), ("highlight", "highlight in")):
+        parser.add_argument(
+            f"--{flag}-pr", type=int, action="append", default=[], metavar="PR", help=f"{text} public release notes"
+        )
+    parser.add_argument("--breaking-pr", type=int, action="append", default=[], metavar="PR", help="mark as breaking")
+    parser.add_argument(
+        "--title-pr", type=_pr_pair, action="append", default=[], metavar="PR=TITLE", help="set release-note title"
+    )
+    parser.add_argument(
+        "--category-pr", type=_pr_pair, action="append", default=[], metavar="PR=CATEGORY", help="set category"
+    )
     parser.add_argument("--preview", action="store_true", help="render release notes without writing or publishing")
     parser.add_argument("--upstream", default="upstream", help="canonical repository remote")
     parser.add_argument("--fork", default="origin", help="remote receiving preparation and backport PRs")
@@ -853,9 +909,18 @@ def main() -> None:
     parser.add_argument("--branch", help=argparse.SUPPRESS)
     args = parser.parse_args()
     try:
-        if (args.preview or args.yes or args.channel or args.version) and (
-            args.cut or args.backport or args.status or args.resolve_push or args.validate_target
-        ):
+        if (
+            args.preview
+            or args.yes
+            or args.channel
+            or args.version
+            or args.include_pr
+            or args.exclude_pr
+            or args.highlight_pr
+            or args.breaking_pr
+            or args.title_pr
+            or args.category_pr
+        ) and (args.cut or args.backport or args.status or args.resolve_push or args.validate_target):
             raise ReleaseError("Preparation flags cannot be combined with another action")
         if args.cut:
             cut(args.cut, args.upstream)
@@ -877,7 +942,22 @@ def main() -> None:
             for key, value in validate_target(args.validate_target, args.branch, args.upstream).items():
                 print(f"{key}={value}")
         else:
-            prepare(args.preview, args.upstream, args.fork, args.channel, args.version, args.yes)
+            prepare(
+                args.preview,
+                args.upstream,
+                args.fork,
+                args.channel,
+                args.version,
+                args.yes,
+                dict(
+                    include=tuple(args.include_pr),
+                    exclude=tuple(args.exclude_pr),
+                    highlight=tuple(args.highlight_pr),
+                    breaking=tuple(args.breaking_pr),
+                    titles=dict(args.title_pr),
+                    categories=dict(args.category_pr),
+                ),
+            )
     except (ReleaseError, KeyboardInterrupt, KeyError, tomllib.TOMLDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
