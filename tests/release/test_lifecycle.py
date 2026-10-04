@@ -105,6 +105,25 @@ class Lifecycle(unittest.TestCase):
         with self.assertRaises(release.ReleaseError):
             check("main", "release/1.1", target)
 
+    def test_main_rejects_release_history_under_unrelated_branch_name(self):
+        self.prepare("stable")
+        self.git("checkout", "-b", "sync-fixes")
+        (self.root / "app.txt").write_text("ordinary fix after release metadata\n")
+        target = self.commit("fix: ordinary branch tip")
+        for base in ("main", "refs/heads/main"):
+            with self.subTest(base=base), self.assertRaisesRegex(release.ReleaseError, "Release metadata"):
+                check(base, "sync-fixes", target)
+
+    def test_main_allows_ordinary_changes_after_existing_release_metadata(self):
+        self.git("checkout", "main")
+        (self.root / "app.txt").write_text("historical release\n")
+        self.commit("chore(release): v1.0.1")
+        self.git("push", "origin", "main")
+        self.git("checkout", "-b", "fix/ordinary")
+        (self.root / "app.txt").write_text("ordinary fix\n")
+        target = self.commit("fix: ordinary change")
+        check("main", "fix/ordinary", target)
+
     def test_downgrade_duplicate_and_invalid_versions(self):
         for version, channel in [("1.1.0-alpha.2", "alpha"), ("1.1.0-beta.1", "beta")]:
             with self.assertRaises(release.ReleaseError):

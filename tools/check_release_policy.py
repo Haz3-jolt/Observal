@@ -17,6 +17,8 @@ def check(base: str, head: str, target: str) -> None:
     if base == "main":
         if head.startswith(("release/", "prepare/", "backport/")):
             raise ReleaseError("Release and backport branches must never merge into main")
+        if any(RELEASE_TITLE.fullmatch(commit.title) for commit in commit_log(f"origin/main..{target}")):
+            raise ReleaseError("Release metadata commits must never merge into main")
         return
     release_series(base)
     changes = commit_log(f"origin/{base}..{target}")
