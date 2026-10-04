@@ -95,7 +95,7 @@ uv run python tools/release.py --channel rc
 uv run python tools/release.py --channel stable
 ```
 
-These are alternatives, not a batch of commands to execute. Use `--version` only for an approved explicit version within the line. Use `--yes` only when the channel and default public-note selection have been approved; it creates and pushes a PR without prompting. Never combine preparation flags with `--cut`, `--backport`, or `--status`.
+These are alternatives, not a batch of commands to execute. Use `--version` only for an approved explicit version within the line. Use `--yes` only when the channel and default public-note selection have been approved; it creates and pushes a PR without prompting. Adjust public notes non-interactively with repeatable `--include-pr N`, `--exclude-pr N`, and `--highlight-pr N`, `--breaking-pr N`, `--title-pr N=TITLE`, and `--category-pr N=CATEGORY` (database migration PRs must be included). Never combine preparation flags with `--cut`, `--backport`, or `--status`.
 
 All code on the release branch ships. The picker curates public notes, not a code cutoff. Include database migrations in the notes. Do not manually change generated versions, lockfiles, or the release manifest to evade validation.
 

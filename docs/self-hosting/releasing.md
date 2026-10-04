@@ -54,7 +54,11 @@ make release ARGS="--channel rc"
 make release ARGS="--channel stable"
 # Non-interactive preparation with default public-note selection:
 make release ARGS="--channel rc --yes"
+# Fully flag-driven, with note overrides (repeatable) and an explicit version:
+make release ARGS="--channel stable --version 1.14.0 --yes --include-pr 1641 --exclude-pr 1700 --highlight-pr 1650 --breaking-pr 1651 --title-pr '1652=Clearer title' --category-pr 1653=Fixes"
 ```
+
+Every prompt has a flag equivalent. `--include-pr`, `--exclude-pr`, `--highlight-pr`, `--breaking-pr`, `--title-pr PR=TITLE`, and `--category-pr PR=CATEGORY` adjust public notes; unknown PR numbers or categories fail. Non-interactive runs need no terminal.
 
 All code on the branch ships. The interactive picker curates public notes, not the code boundary. It can edit note titles, categories, highlights, and breaking-change markers. Database migrations must appear in the public notes. Existing changelog history is preserved.
 
