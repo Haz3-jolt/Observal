@@ -156,6 +156,24 @@ def test_release_discovery_skips_prior_release_metadata(monkeypatch):
     assert [change.title for change in changes] == ["feat: next change"]
 
 
+def test_gh_json_retries_transient_failures_then_fails_loudly(monkeypatch):
+    calls = []
+
+    def flaky(*args):
+        calls.append(args)
+        if len(calls) < 3:
+            raise release.ReleaseError("i/o timeout")
+        return '{"ok": true}'
+
+    monkeypatch.setattr(release, "run", flaky)
+    monkeypatch.setattr(release.time, "sleep", lambda _: None)
+    assert release.gh_json("o/r", "x") == {"ok": True}
+
+    monkeypatch.setattr(release, "run", lambda *a: (_ for _ in ()).throw(release.ReleaseError("down")))
+    with pytest.raises(release.ReleaseError, match="down"):
+        release.gh_json("o/r", "x")
+
+
 def test_resolve_release_push_uses_exact_commit_on_release_branch(monkeypatch):
     normal = Commit("a" * 40, "A", "a@example.com", "fix: normal", "")
     merged = Commit("b" * 40, "B", "b@example.com", "chore(release): v1.10.8", "")

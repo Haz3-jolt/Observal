@@ -11,7 +11,9 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -114,9 +116,18 @@ def repository(remote: str) -> tuple[str, str]:
     return match.group(1), match.group(2)
 
 
+GH_ATTEMPTS = 4
+
+
 def gh_json(repo: str, endpoint: str) -> object:
-    output = run("gh", "api", f"repos/{repo}/{endpoint}")
-    return json.loads(output)
+    for attempt in range(1, GH_ATTEMPTS + 1):
+        try:
+            return json.loads(run("gh", "api", f"repos/{repo}/{endpoint}"))
+        except ReleaseError as exc:
+            if attempt == GH_ATTEMPTS:
+                raise
+            print(f"gh api {endpoint} failed (attempt {attempt}/{GH_ATTEMPTS}), retrying: {exc}", file=sys.stderr)
+            time.sleep(2**attempt)
 
 
 def parse_version(version: str) -> tuple[int, int, int]:
@@ -188,8 +199,10 @@ def commit_log(revision_range: str) -> list[Commit]:
 def discover_changes(repo: str, previous_ref: str, branch: str, base: str = "main") -> list[Change]:
     changes: list[Change] = []
     seen_prs: set[int] = set()
-    for commit in commit_log(f"{previous_ref}..{branch}"):
-        pulls = gh_json(repo, f"commits/{commit.sha}/pulls")
+    commits = commit_log(f"{previous_ref}..{branch}")
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        all_pulls = list(pool.map(lambda c: gh_json(repo, f"commits/{c.sha}/pulls"), commits))
+    for commit, pulls in zip(commits, all_pulls, strict=True):
         matching = [pr for pr in pulls if pr.get("merged_at") and pr.get("base", {}).get("ref") in {"main", base}]
         pr = max(matching, key=lambda item: item["merged_at"]) if matching else None
         pr_number = pr["number"] if pr else None
